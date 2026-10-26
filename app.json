@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Vaidic Sanskar Partner",
+    "slug": "vaidic-sanskar-partner",
+    "scheme": "vaidic-sanskar-partner",
+    "version": "1.0.0",
+    "sdkVersion": "57.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#8B1A1A"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.deificdigital.paramparapartner",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Used to receive nearby puja job requests within your service radius.",
+        "NSCameraUsageDescription": "Required for video consultation with devotees.",
+        "NSMicrophoneUsageDescription": "Required for voice & video consultation with devotees.",
+        "UIBackgroundModes": ["location", "remote-notification"]
+      }
+    },
+    "android": {
+      "package": "com.deificdigital.paramparapartner",
+      "permissions": [
+        "INTERNET",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "POST_NOTIFICATIONS"
+      ],
+      "config": {
+        "googleMaps": { "apiKey": "ADD_YOUR_GOOGLE_MAPS_API_KEY_HERE" }
+      }
+    },
+    "plugins": [
+      "expo-location",
+      "expo-image-picker"
+    ],
+    "extra": {
+      "agoraAppId": "aab8b8f5a8cd4469ab6e44298d9c22d9"
+    },
+    "web": { "favicon": "./assets/favicon.png" }
+  }
+}

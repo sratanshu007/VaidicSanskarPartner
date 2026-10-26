@@ -1,0 +1,65 @@
+# -----------------------------------------------------------------------------
+# Root .gitignore for VaidicSanskarPartner
+# -----------------------------------------------------------------------------
+
+# Sensitive & Secret Files
+google-services.json
+**/google-services.json
+GoogleService-Info.plist
+**/GoogleService-Info.plist
+
+# Environment variables
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Keystores, Certificates & Keys
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.pem
+*.cer
+*.crt
+*.mobileprovision
+*.orig.*
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Expo, Metro & Build Outputs
+.expo/
+**/.expo/
+dist/
+**/dist/
+web-build/
+**/web-build/
+build/
+**/build/
+
+# Package manager & System Logs
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# OS generated files
+.DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+
+# IDE and Editor configurations
+.vscode/
+**/.vscode/
+.idea/
+**/.idea/
+*.swp
+*.swo

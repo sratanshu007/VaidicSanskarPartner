@@ -11,7 +11,7 @@ const expoHost =
 const LAN_IP = '192.168.1.36';
 const host = expoHost || (Platform.OS === 'android' ? (expoHost || '10.0.2.2') : (Platform.OS === 'ios' ? (expoHost || LAN_IP) : 'localhost'));
 
-const rawEnvUrl = process.env.EXPO_PUBLIC_API_URL || 'https://panditjibackend-yfbr.onrender.com/api/partner/';
+const rawEnvUrl = process.env.EXPO_PUBLIC_API_URL || 'https://vaidic-sanskar-admin-suite.onrender.com/api/partner/';
 
 const resolveBaseUrl = () => {
   let url = rawEnvUrl.trim();

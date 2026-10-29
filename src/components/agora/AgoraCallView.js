@@ -48,7 +48,7 @@ export default function AgoraCallView({
   onCallEnded,
 }) {
   const activeAppId = getLiveAgoraAppId(appId);
-  const backendBase = (BASE_URL || process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000')
+  const backendBase = (BASE_URL || process.env.EXPO_PUBLIC_API_URL || 'https://vaidic-sanskar-admin-suite.onrender.com')
     .replace(/\/api\/partner\/?$/, '')
     .replace(/\/api\/?$/, '')
     .replace(/\/+$/, '');
@@ -295,23 +295,34 @@ export default function AgoraCallView({
             }
           }
 
+          const handleControlsUpdate = async (msg) => {
+            if (!msg) return;
+            if (localAudioTrack && typeof msg.isMuted === 'boolean') {
+              localAudioTrack.setEnabled(!msg.isMuted);
+            }
+            if (localVideoTrack && typeof msg.isVideoCamOff === 'boolean') {
+              localVideoTrack.setEnabled(!msg.isVideoCamOff);
+            }
+            if (localVideoTrack && typeof msg.isFrontCam === 'boolean') {
+              try {
+                const cams = await AgoraRTC.getCameras();
+                if (cams && cams.length > 1) {
+                  const targetCam = msg.isFrontCam ? cams[0] : cams[cams.length - 1];
+                  await localVideoTrack.setDevice(targetCam.deviceId);
+                }
+              } catch (e) {}
+            }
+          };
+
           window.addEventListener('message', (e) => {
             try {
-              const msg = JSON.parse(e.data);
-              if (msg.type === 'UPDATE_CONTROLS') {
-                if (localAudioTrack) localAudioTrack.setEnabled(!msg.isMuted);
-                if (localVideoTrack) localVideoTrack.setEnabled(!msg.isVideoCamOff);
-              }
+              handleControlsUpdate(JSON.parse(e.data));
             } catch (err) {}
           });
 
           document.addEventListener('message', (e) => {
             try {
-              const msg = JSON.parse(e.data);
-              if (msg.type === 'UPDATE_CONTROLS') {
-                if (localAudioTrack) localAudioTrack.setEnabled(!msg.isMuted);
-                if (localVideoTrack) localVideoTrack.setEnabled(!msg.isVideoCamOff);
-              }
+              handleControlsUpdate(JSON.parse(e.data));
             } catch (err) {}
           });
 
@@ -331,6 +342,8 @@ export default function AgoraCallView({
         domStorageEnabled={true}
         allowsInlineMediaPlayback={true}
         mediaPlaybackRequiresUserAction={false}
+        mediaCapturePermissionGrantType="grant"
+        androidHardwareAccelerationDisabled={false}
         originWhitelist={['*']}
         onMessage={handleMessage}
         renderLoading={() => (

@@ -22,7 +22,7 @@ class PartnerSocket {
 
   autoConnect() {
     try {
-      const socketHost = (process.env.EXPO_PUBLIC_SOCKET_URL || BASE_URL).replace(/\/api\/partner\/?$/, '').replace(/\/api\/?$/, '');
+      const socketHost = (process.env.EXPO_PUBLIC_SOCKET_URL || 'https://vaidic-sanskar-admin-suite.onrender.com').replace(/\/api\/partner\/?$/, '').replace(/\/api\/?$/, '');
       const token = getAuthToken();
 
       this.socket = io(socketHost, {

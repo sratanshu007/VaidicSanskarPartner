@@ -92,6 +92,7 @@ export default function InCallScreen({ navigation, route }) {
         <AgoraCallView
           channelName={channelName}
           mode={caller.mode || 'video'}
+          token={route.params?.agoraToken || caller?.agoraToken}
           isMuted={isMuted}
           isSpeaker={isSpeaker}
           isVideoCamOff={isVideoCamOff}

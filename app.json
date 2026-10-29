@@ -13,7 +13,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#8B1A1A"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.deificdigital.paramparapartner",
@@ -21,23 +23,28 @@
         "NSLocationWhenInUseUsageDescription": "Used to receive nearby puja job requests within your service radius.",
         "NSCameraUsageDescription": "Required for video consultation with devotees.",
         "NSMicrophoneUsageDescription": "Required for voice & video consultation with devotees.",
-        "UIBackgroundModes": ["location", "remote-notification"]
+        "UIBackgroundModes": [
+          "location",
+          "remote-notification"
+        ]
       }
     },
     "android": {
       "package": "com.deificdigital.paramparapartner",
       "permissions": [
-        "INTERNET",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "CAMERA",
-        "RECORD_AUDIO",
-        "MODIFY_AUDIO_SETTINGS",
-        "POST_NOTIFICATIONS"
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "config": {
-        "googleMaps": { "apiKey": "ADD_YOUR_GOOGLE_MAPS_API_KEY_HERE" }
+        "googleMaps": {
+          "apiKey": "ADD_YOUR_GOOGLE_MAPS_API_KEY_HERE"
+        }
       }
     },
     "plugins": [
@@ -45,8 +52,14 @@
       "expo-image-picker"
     ],
     "extra": {
-      "agoraAppId": "aab8b8f5a8cd4469ab6e44298d9c22d9"
+      "agoraAppId": "aab8b8f5a8cd4469ab6e44298d9c22d9",
+      "eas": {
+        "projectId": "b2d1a695-d316-4fc5-b457-743627dfd458"
+      }
     },
-    "web": { "favicon": "./assets/favicon.png" }
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "owner": "sratanshu"
   }
 }

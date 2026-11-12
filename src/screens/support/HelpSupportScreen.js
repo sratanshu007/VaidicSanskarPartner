@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import colors from '../../theme/colors';
+import { serif } from '../../theme/styles';
 
 export default function HelpSupportScreen({ navigation }) {
   const items = [
@@ -19,18 +19,18 @@ export default function HelpSupportScreen({ navigation }) {
       id: 'faqs',
       title: 'FAQs',
       subtitle: 'Find answers to common questions',
-      icon: 'frequently-asked-questions',
+      icon: 'help-circle-outline',
       onPress: () =>
         Alert.alert(
           'Partner FAQs',
-          '• How do I get booking requests?\nKeep your profile active and service radius set.\n\n• When are payouts released?\nPayouts can be requested anytime to your verified UPI/bank account.'
+          '• How do I get booking requests?\nKeep your service status active.\n\n• When are payouts released?\nPayouts can be requested anytime to your verified UPI/bank account.'
         ),
     },
     {
       id: 'contact',
       title: 'Contact Support',
       subtitle: 'support@vaidicsanskar.com',
-      icon: 'email-outline',
+      icon: 'headphones',
       onPress: () => Linking.openURL('mailto:support@vaidicsanskar.com').catch(() => {}),
     },
     {
@@ -39,17 +39,6 @@ export default function HelpSupportScreen({ navigation }) {
       subtitle: '+91 98765 43210',
       icon: 'phone-outline',
       onPress: () => Linking.openURL('tel:+919876543210').catch(() => {}),
-    },
-    {
-      id: 'cancellation',
-      title: 'Cancellation Policy',
-      subtitle: 'Learn about cancellations',
-      icon: 'shield-alert-outline',
-      onPress: () =>
-        Alert.alert(
-          'Cancellation Policy',
-          'Devotee cancellations before 2 hours receive a full refund. Partner cancellations should be avoided to preserve your service badge.'
-        ),
     },
     {
       id: 'terms',
@@ -62,13 +51,24 @@ export default function HelpSupportScreen({ navigation }) {
           'VaidicSanskar operates in devotion and sacred trust, empowering purohits, acharyas, and mandalis across India.'
         ),
     },
+    {
+      id: 'privacy',
+      title: 'Privacy Policy',
+      subtitle: 'Read our privacy policy',
+      icon: 'shield-lock-outline',
+      onPress: () =>
+        Alert.alert(
+          'Privacy Policy',
+          'Your personal profile, KYC documents, and bank details are encrypted and used strictly for partner verification and payouts.'
+        ),
+    },
   ];
 
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FBF8F2" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FBF6EE" />
       <View style={s.container}>
-        {/* Header */}
+        {/* Header matching Screen 13 */}
         <View style={s.header}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
@@ -90,7 +90,7 @@ export default function HelpSupportScreen({ navigation }) {
             {items.map((item) => (
               <TouchableOpacity
                 key={item.id}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
                 onPress={item.onPress}
                 style={s.itemRow}
               >
@@ -114,14 +114,8 @@ export default function HelpSupportScreen({ navigation }) {
 }
 
 const s = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#FBF8F2',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#FBF8F2',
-  },
+  safe: { flex: 1, backgroundColor: '#FBF6EE' },
+  container: { flex: 1, backgroundColor: '#FBF6EE' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -130,61 +124,35 @@ const s = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 16,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#2E1418',
-    fontFamily: 'serif',
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-  },
-  cardList: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#EDE4DA',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-  },
+  backBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'flex-start' },
+  headerTitle: { fontSize: 19, fontWeight: '800', color: '#2E1418', fontFamily: serif },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: 20, paddingBottom: 32 },
+  cardList: { gap: 12 },
   itemRow: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5EFE7',
+    borderWidth: 1,
+    borderColor: '#EFE2D1',
+    shadowColor: '#67101F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 5,
+    elevation: 2,
   },
   iconWrap: {
-    width: 38,
-    alignItems: 'flex-start',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FDF3E3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
   },
-  itemInfo: {
-    flex: 1,
-    marginRight: 8,
-  },
-  itemTitle: {
-    fontSize: 14.5,
-    fontWeight: '700',
-    color: '#2E1418',
-    marginBottom: 3,
-  },
-  itemSub: {
-    fontSize: 12.5,
-    color: '#7D686B',
-  },
+  itemInfo: { flex: 1 },
+  itemTitle: { fontSize: 15, fontWeight: '800', color: '#2E1418', marginBottom: 2 },
+  itemSub: { fontSize: 12.5, color: '#7D686B' },
 });

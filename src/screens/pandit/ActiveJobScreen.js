@@ -10,6 +10,7 @@ import {
   Platform,
   Linking,
   Alert,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,13 +18,12 @@ import colors from '../../theme/colors';
 import styles, { serif, radius, shadow } from '../../theme/styles';
 import { Header } from '../../components/ui';
 import panditBookingStore from '../../services/panditBookingStore';
-import { io } from 'socket.io-client';
-import api, { BASE_URL, getAuthToken, JobService } from '../../services/api';
+import socket from '../../services/socket';
+import api, { JobService } from '../../services/api';
 
 export default function ActiveJobScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const [booking, setBooking] = useState(panditBookingStore.getBooking());
-  const socketRef = useRef(null);
 
   // Local simulated distance for geofence check (meters)
   const [distanceMeters, setDistanceMeters] = useState(120);
@@ -51,38 +51,30 @@ export default function ActiveJobScreen({ navigation, route }) {
 
   // Subscribe to store updates and socket
   useEffect(() => {
-    // If no booking in store, initialize one from route or default
+    // Preserve incoming job (with its real server/socket ID & OTPs) instead of generating a fake random OTP
     if (!panditBookingStore.getBooking()) {
-      panditBookingStore.createBooking({
-        pooja: route.params?.job?.pooja,
-      });
-      panditBookingStore.acceptBooking();
+      if (route.params?.job) {
+        panditBookingStore.setBooking({
+          ...route.params.job,
+          status: route.params.job.status || 'ACCEPTED',
+        });
+      } else {
+        panditBookingStore.createBooking({});
+        panditBookingStore.acceptBooking();
+      }
     }
 
     const unsub = panditBookingStore.subscribe((b) => {
       setBooking(b ? { ...b } : null);
     });
 
-    try {
-      const socketHost = (process.env.EXPO_PUBLIC_SOCKET_URL || BASE_URL).replace(/\/api\/partner\/?$/, '').replace(/\/api\/?$/, '');
-      const token = getAuthToken();
-      const s = io(socketHost, {
-        auth: { token },
-        transports: ['websocket', 'polling'],
-        timeout: 8000,
-      });
-      socketRef.current = s;
-      const bId = booking?.id || route?.params?.job?.id;
-      if (bId) {
-        s.emit('booking:join', { bookingId: bId });
-      }
-    } catch (e) {
-      console.log('ActiveJob socket init notice:', e?.message);
+    const bId = panditBookingStore.getBooking()?.id || route?.params?.job?.id;
+    if (bId) {
+      socket.join(bId);
     }
 
     return () => {
       if (typeof unsub === 'function') unsub();
-      if (socketRef.current) socketRef.current.disconnect();
     };
   }, []);
 
@@ -126,8 +118,8 @@ export default function ActiveJobScreen({ navigation, route }) {
   // Step 1: Pandit sets On The Way
   const handleOnTheWay = () => {
     panditBookingStore.setOnTheWay();
-    if (socketRef.current && booking?.id) {
-      socketRef.current.emit('vendor:location', {
+    if (booking?.id) {
+      socket.emit('vendor:location', {
         bookingId: booking.id,
         latitude: 28.5355,
         longitude: 77.3910,
@@ -142,56 +134,112 @@ export default function ActiveJobScreen({ navigation, route }) {
     const res = panditBookingStore.setArrived(distanceMeters);
     if (!res.success) {
       Alert.alert('जियोफेंस सीमा त्रुटि', res.message);
-    } else {
-      if (socketRef.current && booking?.id) {
-        socketRef.current.emit('booking:arrived', { bookingId: booking.id });
-      }
-      if (booking?.id) {
-        api.put(`instant/${booking.id}/arrived`).catch(() => { });
-      }
+    } else if (booking?.id) {
+      socket.emit('booking:arrived', { bookingId: booking.id });
+      JobService.arrive(booking.id).catch(() => { });
+      api.put(`instant/${booking.id}/arrived`).catch(() => { });
     }
   };
 
   // Step 3: Pandit enters Start OTP (provided by Yajman)
-  const handleVerifyStartOtp = () => {
-    const code = startOtp.join('');
+  const handleVerifyStartOtp = async () => {
+    const code = startOtp.join('').trim();
     if (code.length < 4) {
       Alert.alert('त्रुटि', 'कृपया 4-अंकों का Start OTP दर्ज करें।');
       return;
     }
-    const res = panditBookingStore.verifyStartOtp(code);
-    if (!res.success) {
-      Alert.alert('अमान्य OTP', res.message);
-    } else {
-      if (socketRef.current && booking?.id) {
-        socketRef.current.emit('booking:pooja_started', { bookingId: booking.id });
+
+    let verified = false;
+    let errMsg = null;
+
+    if (booking?.id) {
+      try {
+        const apiRes = await JobService.verifyStartOtp(booking.id, code);
+        if (apiRes?.success) {
+          verified = true;
+          panditBookingStore.forceStart();
+        } else if (apiRes?.message) {
+          errMsg = apiRes.message;
+        }
+      } catch (err) {
+        if (err?.status === 400 || err?.status === 429) {
+          errMsg = err?.message || 'अमान्य Start OTP। कृपया यजमान की ऐप से पुनः जांचें।';
+        }
       }
-      if (booking?.id) {
-        api.put(`instant/${booking.id}/start`, { startOtp: code, otp: code }).catch(() => { });
+    }
+
+    if (!verified) {
+      const localExpected = booking?.startOtp || route.params?.job?.startOtp;
+      if (localExpected && String(localExpected).trim() === code) {
+        panditBookingStore.setStartOtp(localExpected);
+        panditBookingStore.forceStart();
+        verified = true;
+      } else if (!errMsg) {
+        const res = panditBookingStore.verifyStartOtp(code);
+        if (res.success) verified = true;
+        else errMsg = res.message;
       }
+    }
+
+    if (!verified) {
+      Alert.alert('अमान्य OTP', errMsg || 'Start OTP मेल नहीं खा रहा है।');
+      return;
+    }
+
+    if (booking?.id) {
+      socket.emit('booking:pooja_started', { bookingId: booking.id });
     }
   };
 
   // Step 4: Pandit enters Complete OTP (provided by Yajman)
-  const handleVerifyCompleteOtp = () => {
-    const code = completeOtp.join('');
+  const handleVerifyCompleteOtp = async () => {
+    const code = completeOtp.join('').trim();
     if (code.length < 4) {
       Alert.alert('त्रुटि', 'कृपया 4-अंकों का Complete OTP दर्ज करें।');
       return;
     }
-    const res = panditBookingStore.verifyCompleteOtp(code);
-    if (!res.success) {
-      Alert.alert('अमान्य OTP', res.message);
-    } else {
-      if (socketRef.current && booking?.id) {
-        socketRef.current.emit('booking:completed', { bookingId: booking.id });
+
+    let verified = false;
+    let errMsg = null;
+
+    if (booking?.id) {
+      try {
+        const apiRes = await JobService.verifyCompleteOtp(booking.id, code);
+        if (apiRes?.success) {
+          verified = true;
+          panditBookingStore.forceComplete();
+        } else if (apiRes?.message) {
+          errMsg = apiRes.message;
+        }
+      } catch (err) {
+        if (err?.status === 400 || err?.status === 429) {
+          errMsg = err?.message || 'अमान्य Completion OTP। कृपया यजमान की ऐप से पुनः जांचें।';
+        }
       }
-      if (booking?.id) {
-        api.put(`instant/${booking.id}/complete`, { endOtp: code, completeOtp: code, otp: code }).catch(() => { });
-        JobService.complete(booking.id, code).catch(() => { });
-      }
-      navigation.replace('Review', { name: yajmanName, job: booking });
     }
+
+    if (!verified) {
+      const localExpected = booking?.completeOtp || route.params?.job?.completeOtp;
+      if (localExpected && String(localExpected).trim() === code) {
+        panditBookingStore.setCompleteOtp(localExpected);
+        panditBookingStore.forceComplete();
+        verified = true;
+      } else if (!errMsg) {
+        const res = panditBookingStore.verifyCompleteOtp(code);
+        if (res.success) verified = true;
+        else errMsg = res.message;
+      }
+    }
+
+    if (!verified) {
+      Alert.alert('अमान्य OTP', errMsg || 'Complete OTP मेल नहीं खा रहा है।');
+      return;
+    }
+
+    if (booking?.id) {
+      socket.emit('booking:completed', { bookingId: booking.id });
+    }
+    navigation.replace('Review', { name: yajmanName, job: booking });
   };
 
   // Pandit cancellation (with penalty warning)
@@ -220,9 +268,11 @@ export default function ActiveJobScreen({ navigation, route }) {
         navigation={navigation}
       />
 
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 90 }]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Status Lifecycle Stepper */}
         <View style={s.stepperCard}>
@@ -581,6 +631,7 @@ export default function ActiveJobScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Cancellation Penalty Warning Modal */}
       <Modal visible={showCancelModal} transparent animationType="fade">
@@ -613,7 +664,7 @@ export default function ActiveJobScreen({ navigation, route }) {
 
       {/* Dispute Modal */}
       <Modal visible={showDisputeModal} transparent animationType="fade">
-        <View style={s.modalBackdrop}>
+        <KeyboardAvoidingView style={s.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={s.modalCard}>
             <Text style={s.modalTitle}>समस्या या विवाद दर्ज करें</Text>
             <Text style={s.modalDesc}>
@@ -643,7 +694,7 @@ export default function ActiveJobScreen({ navigation, route }) {
               <Text style={s.stayBtnText}>रद्द करें</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

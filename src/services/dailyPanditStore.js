@@ -114,32 +114,17 @@ export const DEMO_DAILY_SITES = [
 
 class PartnerDailyPanditStore {
   constructor() {
-    this.sites = JSON.parse(JSON.stringify(DEMO_DAILY_SITES));
-    this.newSiteOffer = {
-      id: 'OFFER-9921',
-      siteName: 'श्री गणपति स्वीट्स व चाट',
-      siteType: 'दुकान (Shop)',
-      area: 'आलमबाग, लखनऊ',
-      slot: '06:30 – 07:00 AM',
-      vidhiName: 'दैनिक पूजा (Regular Puja)',
-      durationMin: 25,
-      monthlyPayout: 3400,
-      perVisitPayout: 130,
-      distanceKm: '1.4 किमी आपके रूट से',
-      expiresInHours: 11,
-      status: 'PENDING', // PENDING | ACCEPTED | REJECTED
-    };
+    this.sites = [];
+    this.newSiteOffer = null;
     this.backupRequest = null;
-    this.leaves = [
-      { id: 'LV-1', date: '05 Oct 2026', reason: 'पारिवारिक कार्य', status: 'APPROVED', backup: 'पं. अमित जोशी' },
-    ];
+    this.leaves = [];
     this.scorecard = {
-      monthlyVisits: 142,
-      onTimeRate: '98.2%',
-      completedRate: '100%',
-      monthlyBonusEligible: true, // >= 95% gets ₹1,500 bonus
-      monthlyBonusAmount: 1500,
-      todayEarnings: 625,
+      monthlyVisits: 0,
+      onTimeRate: '0%',
+      completedRate: '0%',
+      monthlyBonusEligible: false,
+      monthlyBonusAmount: 0,
+      todayEarnings: 0,
     };
     this.listeners = new Set();
   }

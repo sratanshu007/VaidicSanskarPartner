@@ -37,46 +37,26 @@ class PartnerAstroStore {
       hoursRemaining: 3,
     };
 
-    // Incoming Request Simulation
-    this.incomingRequest = {
-      id: 'REQ-8891',
-      userName: 'रमेश कुमार',
-      mode: 'chat', // chat | audio | video
-      rate: 5,
-      topic: 'करियर व नौकरी (Career & Job)',
-      birthDetails: {
-        dob: '15-08-1994',
-        tob: '06:45 AM',
-        pob: 'लखनऊ, उत्तर प्रदेश',
-        gender: 'पुरुष (Male)',
-        kundali: {
-          lagna: 'सिंह (Leo)',
-          rashi: 'वृश्चिक (Scorpio)',
-          nakshatra: 'अनुराधा (चरण 2)',
-          dasha: 'बुध महादशा • शुक्र अंतर्दशा',
-          favorablePlanets: 'सूर्य, मंगल, गुरु',
-          remedyRecommended: 'आदित्य हृदय स्तोत्र पाठ, माणिक्य रत्न',
-        },
-      },
-      expiresInSeconds: 58,
-    };
+    // Real-time incoming call request (populated only from live WebSocket events)
+    this.incomingRequest = null;
 
-    // Waitlist queue
-    this.waitlist = [
-      { id: 'W-1', userName: 'अमित मिश्रा', mode: 'audio', topic: 'विवाह योग', waitMinutes: 6 },
-      { id: 'W-2', userName: 'सुनील वर्मा', mode: 'chat', topic: 'व्यापार वृद्धि', waitMinutes: 14 },
-    ];
+    // Waitlist queue (populated only from live socket requests)
+    this.waitlist = [];
+
+    // Consultation history (populated only from real completed sessions)
+    this.history = [];
 
     // Active session
     this.activeSession = null;
 
-    // Today's Earnings & Stats
+    // Live Earnings & Stats (zero-initialized for new partners)
     this.stats = {
-      todayEarnings: 1840,
-      todayMinutes: 98,
-      completedOrders: 9,
-      averageRating: 4.96,
-      repeatCustomerRate: '78%',
+      todayEarnings: 0,
+      todayMinutes: 0,
+      completedOrders: 0,
+      averageRating: 0,
+      reviewsCount: 0,
+      repeatCustomerRate: '0%',
     };
 
     this.sessionNotes = {};
@@ -109,6 +89,26 @@ class PartnerAstroStore {
 
   getStats() {
     return this.stats;
+  }
+
+  getHistory() {
+    return this.history;
+  }
+
+  reset() {
+    this.incomingRequest = null;
+    this.activeSession = null;
+    this.waitlist = [];
+    this.history = [];
+    this.stats = {
+      todayEarnings: 0,
+      todayMinutes: 0,
+      completedOrders: 0,
+      averageRating: 0,
+      reviewsCount: 0,
+      repeatCustomerRate: '0%',
+    };
+    this.notify();
   }
 
   subscribe(listener) {
@@ -176,30 +176,34 @@ class PartnerAstroStore {
   }
 
   // Trigger Demo Incoming Request
-  triggerDemoIncomingRequest(mode = 'audio') {
+  triggerDemoIncomingRequest(mode = 'audio', customData = {}) {
+    const callerName = customData.name || (mode === 'video' ? 'राहुल शर्मा (यजमान)' : 'विकास अग्निहोत्री');
+    const topic = customData.topic || (mode === 'video' ? 'विवाह व मांगलिक विचार (Kundali Match)' : 'करियर व नौकरी परामर्श (Career)');
     this.incomingRequest = {
       id: `REQ-${Date.now().toString().slice(-4)}`,
-      userName: 'विकास अग्निहोत्री',
+      userName: callerName,
       mode,
-      rate: this.rates[mode] || 22,
-      topic: 'विवाह व मांगलिक दोष (Marriage)',
-      birthDetails: {
-        dob: '02-05-1996',
-        tob: '04:15 PM',
-        pob: 'कानपुर, उत्तर प्रदेश',
+      rate: customData.rate || this.rates[mode] || 5,
+      topic,
+      channelName: `vartalap_${mode}_${Date.now().toString().slice(-6)}`,
+      birthDetails: customData.birthDetails || {
+        dob: '14-08-1995',
+        tob: '07:30 AM',
+        pob: 'वाराणसी, उत्तर प्रदेश',
         gender: 'पुरुष (Male)',
         kundali: {
-          lagna: 'कन्या (Virgo)',
-          rashi: 'तुला (Libra)',
-          nakshatra: 'स्वाति (चरण 3)',
-          dasha: 'गुरु महादशा • शनि अंतर्दशा',
-          favorablePlanets: 'शुक्र, बुध, शनि',
-          remedyRecommended: 'विष्णु सहस्रनाम, शुक्रवार को खीर दान',
+          lagna: 'सिंह (Leo)',
+          rashi: 'वृश्चिक (Scorpio)',
+          nakshatra: 'अनुराधा (चरण 2)',
+          dasha: 'बुध महादशा • शुक्र अंतर्दशा',
+          favorablePlanets: 'सूर्य, मंगल, गुरु',
+          remedyRecommended: 'आदित्य हृदय स्तोत्र पाठ, सूर्य अर्घ्य',
         },
       },
       expiresInSeconds: 60,
     };
     this.notify();
+    return this.incomingRequest;
   }
 
   // Send message in active session
@@ -244,7 +248,13 @@ class PartnerAstroStore {
     this.stats.todayMinutes += billedMins;
     this.stats.completedOrders += 1;
 
-    const finished = { ...this.activeSession, billedMins, netEarned };
+    const finished = {
+      ...this.activeSession,
+      billedMins,
+      netEarned,
+      completedAt: new Date().toISOString(),
+    };
+    this.history.unshift(finished);
     this.activeSession = null;
     this.notify();
     return finished;

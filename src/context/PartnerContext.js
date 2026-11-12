@@ -11,6 +11,7 @@ import {
 } from '../services/api';
 import partnerDb from '../services/partnerDb';
 import socket from '../services/socket';
+import partnerAstroStore from '../services/talkToAstroStore';
 
 /**
  * Partner-side global state (Provider pattern).
@@ -121,31 +122,51 @@ export const PartnerProvider = ({ children }) => {
   const [expectedEarnings, setExpectedEarnings] = useState(0);
   const [slots, setSlots] = useState(DEFAULT_SLOTS);
 
-  const refreshBookings = useCallback(async () => {
+  const vendorId = vendor?.id || vendor?._id || null;
+
+  const refreshBookings = useCallback(async (overrideVendorId) => {
+    const targetId = overrideVendorId || vendorId;
+    if (!targetId) {
+      setBookings([]);
+      return;
+    }
     try {
-      const res = await BookingService.list();
+      const res = await BookingService.list(targetId);
       if (res?.success && Array.isArray(res.bookings)) {
         setBookings(res.bookings);
       }
     } catch (e) {
       console.log('Bookings refresh note:', e?.message);
     }
-  }, []);
+  }, [vendorId]);
 
-  const refreshEarnings = useCallback(async () => {
+  const refreshEarnings = useCallback(async (overrideVendorId) => {
+    const targetId = overrideVendorId || vendorId;
+    if (!targetId) {
+      setWalletBalance(0);
+      setExpectedEarnings(0);
+      setTransactions([]);
+      return;
+    }
     try {
-      const res = await EarningsService.summary();
-      if (res?.success && res.earnings) {
-        setWalletBalance(res.earnings.pending || res.earnings.available || 0);
-        setExpectedEarnings(res.earnings.expected || res.earnings.total || 0);
-        if (Array.isArray(res.earnings.transactions)) {
-          setTransactions(res.earnings.transactions);
-        }
+      const res = await EarningsService.summary(targetId);
+      if (res?.success) {
+        const earnObj = res.earnings || {};
+        const bal = res.walletBalance ?? earnObj.available ?? earnObj.pending ?? 0;
+        const exp = res.expectedEarnings ?? earnObj.expected ?? 0;
+        const txs = Array.isArray(res.transactions)
+          ? res.transactions
+          : Array.isArray(earnObj.transactions)
+          ? earnObj.transactions
+          : [];
+        setWalletBalance(Number(bal) || 0);
+        setExpectedEarnings(Number(exp) || 0);
+        setTransactions(txs);
       }
     } catch (e) {
       console.log('Earnings refresh note:', e?.message);
     }
-  }, []);
+  }, [vendorId]);
 
   const refreshSlots = useCallback(async () => {
     try {
@@ -196,16 +217,53 @@ export const PartnerProvider = ({ children }) => {
     })();
   }, []);
 
-  // Sync fresh server records when vendor is active
+  // Sync fresh server records and live earning updates when vendor is active
   useEffect(() => {
-    if (vendor) {
-      refreshBookings();
-      refreshEarnings();
-      refreshSlots();
+    if (!vendor) return;
+    const id = vendor.id || vendor._id;
+    refreshBookings(id);
+    refreshEarnings(id);
+    refreshSlots();
+
+    if (id) {
+      socket.emit('vendor:join', { vendorId: id });
+      socket.emit('pandit:join', { vendorId: id });
     }
+
+    const onEarningsUpdated = (payload) => {
+      if (!payload) return;
+      if (payload.vendorId && id && String(payload.vendorId) !== String(id)) return;
+      if (payload.walletBalance != null) setWalletBalance(Number(payload.walletBalance) || 0);
+      if (Array.isArray(payload.transactions)) {
+        setTransactions(payload.transactions);
+      } else if (payload.transaction) {
+        setTransactions((prev) => [payload.transaction, ...prev.filter((t) => t.id !== payload.transaction.id)]);
+      } else {
+        refreshEarnings(id);
+      }
+    };
+
+    const onBookingDone = () => {
+      refreshBookings(id);
+      refreshEarnings(id);
+    };
+
+    socket.on('earnings:updated', onEarningsUpdated);
+    socket.on('booking:completed', onBookingDone);
+    return () => {
+      socket.off('earnings:updated', onEarningsUpdated);
+      socket.off('booking:completed', onBookingDone);
+    };
   }, [vendor, refreshBookings, refreshEarnings, refreshSlots]);
 
   const register = useCallback((data, token) => {
+    setBookings([]);
+    setWalletBalance(Number(data?.walletBalance || 0));
+    setExpectedEarnings(Number(data?.expectedEarnings || 0));
+    setTransactions([]);
+    setNotifications([]);
+    setSlots([]);
+    partnerAstroStore.reset();
     setVendor(data);
     if (data?.role) setRole(data.role);
     if (data?.mandali) setCurrentMandali(data.mandali);
@@ -226,10 +284,13 @@ export const PartnerProvider = ({ children }) => {
       socket.emit('astro:presence', { id: vendor.id, isOnline: false });
     }
     socket.disconnect();
+    partnerAstroStore.reset();
     setVendor(null);
     setRole(null);
     setAuthToken(null);
     setBookings([]);
+    setNotifications([]);
+    setSlots([]);
     setWalletBalance(0);
     setExpectedEarnings(0);
     setTransactions([]);
@@ -258,43 +319,45 @@ export const PartnerProvider = ({ children }) => {
     setMandalis((list) => [...list, item]);
   }, []);
 
-  const withdrawFunds = useCallback((amount) => {
-    const amt = Number(amount) || 1000;
-    EarningsService.payout(amt).catch(() => {});
-    setWalletBalance((prev) => Math.max(0, prev - amt));
+  const withdrawFunds = useCallback(async (amount, upiId) => {
+    const amt = Number(amount) || 0;
+    if (amt <= 0) return;
+    await EarningsService.payout(amt, { vendorId: vendor?.id, upiId });
+    await refreshEarnings(vendor?.id);
+  }, [vendor?.id, refreshEarnings]);
+
+  const addEarning = useCallback((amount, reason = 'Astro Consultation') => {
+    const amt = Number(amount) || 0;
+    if (amt <= 0) return;
+    setWalletBalance((prev) => prev + amt);
+    setExpectedEarnings((prev) => prev + amt);
     setTransactions((prev) => [
       {
         id: 'tx_' + Date.now(),
-        title: 'Withdrawn',
-        sub: `${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} • UPI`,
-        amount: -amt,
-        type: 'debit',
-        icon: 'bank-transfer-out',
+        title: reason,
+        sub: `${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} • Credited`,
+        amount: amt,
+        type: 'credit',
+        icon: 'cash-plus',
       },
       ...prev,
     ]);
-  }, []);
+    if (vendor?.id) {
+      EarningsService.credit({ vendorId: vendor.id, amount: amt, title: reason })
+        .then(() => refreshEarnings(vendor.id))
+        .catch(() => {});
+    }
+  }, [vendor?.id, refreshEarnings]);
 
-  const requestPayout = useCallback(async (amount) => {
+  const requestPayout = useCallback(async (amount, upiId) => {
     const amt = Number(amount) || 0;
     try {
-      await EarningsService.payout(amt);
+      await EarningsService.payout(amt, { vendorId: vendor?.id, upiId });
+      await refreshEarnings(vendor?.id);
     } catch (e) {
       console.warn('Payout API warning:', e?.message);
     }
-    setWalletBalance((prev) => Math.max(0, prev - amt));
-    setTransactions((prev) => [
-      {
-        id: 'tx_' + Date.now(),
-        title: 'Payout Initiated',
-        sub: `${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} • Bank/UPI`,
-        amount: -amt,
-        type: 'debit',
-        icon: 'bank-transfer-out',
-      },
-      ...prev,
-    ]);
-  }, []);
+  }, [vendor?.id, refreshEarnings]);
 
   const value = {
     vendor,
@@ -336,6 +399,7 @@ export const PartnerProvider = ({ children }) => {
       paid: 0,
     },
     transactions,
+    addEarning,
     withdrawFunds,
     requestPayout,
     refreshEarnings,

@@ -67,9 +67,42 @@ export const endpoints = {
 };
 
 export const BookingService = {
-  list: () => api.get(endpoints.bookings),
-  active: () => api.get(endpoints.activeJob),
+  list: (vendorId) => api.get(endpoints.bookings, vendorId ? { params: { vendorId } } : undefined),
+  active: (vendorId) => api.get(endpoints.activeJob, vendorId ? { params: { vendorId } } : undefined),
   getById: (id) => api.get(`bookings/${id}`),
+};
+
+const postMultipart = async (path, formData) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  try {
+    const cleanPath = String(path || '').replace(/^\/+/, '');
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await fetch(`${BASE_URL}${cleanPath}`, {
+      method: 'POST',
+      headers,
+      body: formData,
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { message: text };
+    }
+    if (!res.ok) {
+      throw { message: data?.message || `Upload failed (${res.status})`, status: res.status };
+    }
+    return data;
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw { message: 'Upload timed out. Please check your internet connection and retry.', status: 408 };
+    }
+    throw err?.message ? err : { message: 'Network error while uploading image.' };
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 export const VendorService = {
@@ -84,19 +117,25 @@ export const VendorService = {
   updateProfile: (payload) => api.put('vendor/profile', payload),
   checkStatus: (query) => api.get('vendor/status', { params: { query, email: query, phone: query } }),
   getProfile: (query) => api.get('vendor/profile', { params: { query, email: query, phone: query } }),
-  uploadPhoto: (formData) =>
-    api.post('upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
-  uploadKyc: (form) =>
-    api.post(endpoints.uploadKyc, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  // Use native fetch without an explicit Content-Type header so React Native sets the multipart boundary.
+  uploadPhoto: (formData) => postMultipart('upload', formData),
+  uploadKyc: (form) => postMultipart(endpoints.uploadKyc, form),
 };
 export const JobService = {
-  accept: (jobId) => api.post(endpoints.jobAccept, { job_id: jobId }),
-  decline: (jobId) => api.post(endpoints.jobDecline, { job_id: jobId }),
-  complete: (jobId, otp) => api.post(endpoints.jobComplete, { job_id: jobId, otp }),
+  accept: (jobId) => api.post(endpoints.jobAccept, { job_id: jobId, booking_id: jobId, bookingId: jobId }),
+  decline: (jobId) => api.post(endpoints.jobDecline, { job_id: jobId, booking_id: jobId, bookingId: jobId }),
+  arrive: (bookingId) => api.post(`bookings/${bookingId}/arrive`),
+  verifyStartOtp: (bookingId, otp) =>
+    api.post(`bookings/${bookingId}/verify-start-otp`, { otp: String(otp || '').trim(), startOtp: String(otp || '').trim() }),
+  verifyCompleteOtp: (bookingId, otp) =>
+    api.post(`bookings/${bookingId}/verify-complete-otp`, { otp: String(otp || '').trim(), completeOtp: String(otp || '').trim() }),
+  complete: (jobId, otp) =>
+    api.post(endpoints.jobComplete, {
+      job_id: jobId,
+      booking_id: jobId,
+      bookingId: jobId,
+      otp: String(otp || '').trim(),
+    }),
 };
 export const SlotService = {
   list: () => api.get(endpoints.slots),
@@ -116,8 +155,9 @@ export const AstroService = {
   setRates: (rates) => api.post(endpoints.rates, rates),
 };
 export const EarningsService = {
-  summary: () => api.get(endpoints.earnings),
-  payout: (amount) => api.post(endpoints.payout, { amount }),
+  summary: (vendorId) => api.get(endpoints.earnings, vendorId ? { params: { vendorId } } : undefined),
+  credit: (payload) => api.post('earnings/credit', payload),
+  payout: (amount, extra = {}) => api.post(endpoints.payout, { amount, ...extra }),
 };
 
 export default api;

@@ -179,6 +179,7 @@ export default function RegisterScreen({ navigation, route }) {
       const res = await VendorService.sendEmailOtp(email.trim().toLowerCase(), name.trim());
       if (res?.success) {
         if (res.otp || res.devOtp) setDevOtpHint(String(res.otp || res.devOtp));
+        setOtp(['', '', '', '', '', '']);
         setCountdown(30);
         setCanResend(false);
         Alert.alert('Code Resent', `A fresh verification code has been dispatched to ${email.trim()}.`);
@@ -245,7 +246,7 @@ export default function RegisterScreen({ navigation, route }) {
     <SafeAreaView style={s.safe} edges={['top', 'bottom', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor="#FBF8F2" />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <ScrollView

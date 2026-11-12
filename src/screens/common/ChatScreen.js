@@ -1,16 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Header } from '../../components/ui';
 import colors from '../../theme/colors';
 import socket from '../../services/socket';
+import { useKeyboardLift } from '../../utils/useKeyboardLift';
 
 export default function ChatScreen({ navigation, route }) {
+  const insets = useSafeAreaInsets();
   const name = route.params?.name || route.params?.yajmanName || 'यजमान';
   const bookingId = route.params?.bookingId || route.params?.id || route.params?.jobId;
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const listRef = useRef();
+  const { androidLift, onContainerLayout } = useKeyboardLift(() => {
+    listRef.current?.scrollToEnd({ animated: true });
+  });
 
   useEffect(() => {
     if (bookingId) {
@@ -49,23 +55,50 @@ export default function ChatScreen({ navigation, route }) {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.cream }}>
+    <KeyboardAvoidingView
+      onLayout={onContainerLayout}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={[
+        { flex: 1, backgroundColor: colors.cream },
+        Platform.OS === 'android' && androidLift > 0 ? { paddingBottom: androidLift } : null,
+      ]}
+    >
       <Header title={name} subtitle="🔒 Number masked · encrypted" navigation={navigation} colorsArr={colors.maroonGradient} />
-      <FlatList ref={listRef} data={messages} keyExtractor={(m) => m.id} contentContainerStyle={{ padding: 16 }}
+      <FlatList
+        ref={listRef}
+        data={messages}
+        keyExtractor={(m) => m.id}
+        contentContainerStyle={{ padding: 16, flexGrow: 1 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         renderItem={({ item }) => (
           <View style={[s.b, item.from === 'me' ? s.me : s.them]}>
             <Text style={[s.msg, item.from === 'me' && { color: '#fff' }]}>{item.text}</Text>
             <Text style={[s.time, item.from === 'me' && { color: colors.goldSoft }]}>{item.at}</Text>
           </View>
-        )} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={s.bar}>
-          <TextInput style={s.input} placeholder="Type a message…" placeholderTextColor={colors.textMuted} value={text} onChangeText={setText} />
-          <TouchableOpacity style={s.send} onPress={send}><MaterialCommunityIcons name="send" size={20} color="#fff" /></TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </View>
+        )}
+      />
+      <View
+        style={[
+          s.bar,
+          { paddingBottom: androidLift > 0 ? 10 : Math.max(insets.bottom, 12) },
+        ]}
+      >
+        <TextInput
+          style={s.input}
+          placeholder="Type a message…"
+          placeholderTextColor={colors.textMuted}
+          value={text}
+          onChangeText={setText}
+          onFocus={() => setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 120)}
+          multiline
+          maxLength={1000}
+          textAlignVertical="center"
+        />
+        <TouchableOpacity style={s.send} onPress={send}><MaterialCommunityIcons name="send" size={20} color="#fff" /></TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 function now() { return new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }); }
@@ -75,7 +108,7 @@ const s = StyleSheet.create({
   them: { backgroundColor: '#fff', alignSelf: 'flex-start', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: colors.border },
   msg: { fontSize: 14.5, color: colors.text, lineHeight: 20 },
   time: { fontSize: 10, color: colors.textMuted, marginTop: 4, alignSelf: 'flex-end' },
-  bar: { flexDirection: 'row', alignItems: 'center', padding: 10, paddingBottom: 26, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: colors.border },
-  input: { flex: 1, backgroundColor: colors.cream, borderRadius: 100, paddingHorizontal: 16, height: 46, fontSize: 15, color: colors.text },
+  bar: { flexDirection: 'row', alignItems: 'center', padding: 10, paddingBottom: 14, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: colors.border },
+  input: { flex: 1, minHeight: 44, maxHeight: 110, backgroundColor: colors.cream, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, color: colors.text },
   send: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.maroon, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
 });

@@ -1,427 +1,550 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
-  StatusBar,
-  Modal,
+  TouchableOpacity,
+  Image,
   TextInput,
+  Switch,
+  Modal,
   Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { serif, shadow } from '../../theme/styles';
 import { usePartner } from '../../context/PartnerContext';
-import colors from '../../theme/colors';
+import { VendorService } from '../../services/api';
+
+const CAPACITY_OPTIONS = ['2-5 Members', '5-20 Members', '10-25 Members', '20-50 Members'];
 
 export default function MandaliManagementScreen({ navigation }) {
-  const { mandalis, currentMandali, selectMandali, addMandali } = usePartner();
+  const {
+    vendor,
+    updateVendor,
+    mandalis,
+    currentMandali,
+    selectMandali,
+    addMandali,
+  } = usePartner();
+
+  const [mandaliName, setMandaliName] = useState(
+    currentMandali?.name || vendor?.mandaliName || 'Shree Vedic Mandali'
+  );
+  const [description, setDescription] = useState(
+    currentMandali?.description || 'Traditional Pooja Mandali for all rituals, Bhajan & Sundarkand.'
+  );
+  const [capacity, setCapacity] = useState(currentMandali?.capacity || '5-20 Members');
+  const [serviceActive, setServiceActive] = useState(currentMandali?.active !== false);
+  const [capModalVisible, setCapModalVisible] = useState(false);
 
   const [addModalVisible, setAddModalVisible] = useState(false);
-  const [newMandaliName, setNewMandaliName] = useState('');
-  const [newPujaris, setNewPujaris] = useState('4');
-  const [newMembers, setNewMembers] = useState('10');
+  const [newName, setNewName] = useState('');
+  const [newCity, setNewCity] = useState('');
+  const [newCapacity, setNewCapacity] = useState('5-20 Members');
+  const [saving, setSaving] = useState(false);
 
-  const activeMandali = mandalis.find((m) => m.name === currentMandali) || mandalis[0];
-  const otherMandalis = mandalis.filter((m) => m.name !== activeMandali.name);
+  useEffect(() => {
+    if (currentMandali) {
+      setMandaliName(currentMandali.name || 'Shree Vedic Mandali');
+      setDescription(
+        currentMandali.description ||
+          'Traditional Pooja Mandali for all rituals, Bhajan & Sundarkand.'
+      );
+      setCapacity(currentMandali.capacity || '5-20 Members');
+      setServiceActive(currentMandali.active !== false);
+    }
+  }, [currentMandali?.id]);
 
-  const handleCreateMandali = () => {
-    if (!newMandaliName.trim()) {
-      Alert.alert('Required', 'Please enter mandali name');
+  const handleUpdateMandali = async () => {
+    if (!mandaliName.trim()) {
+      Alert.alert('Required', 'Please enter a Mandali Name.');
       return;
     }
-    addMandali({
-      name: newMandaliName.trim(),
-      pujaris: newPujaris,
-      members: newMembers,
-    });
-    setNewMandaliName('');
+    setSaving(true);
+    try {
+      const payload = {
+        email: vendor?.email,
+        phone: vendor?.phone,
+        mandaliName: mandaliName.trim(),
+        mandaliDescription: description.trim(),
+        mandaliCapacity: capacity,
+        mandaliActive: serviceActive,
+        offersMandali: true,
+      };
+      try {
+        await VendorService.updateProfile(payload);
+      } catch (err) {
+        console.log('Mandali update API notice:', err?.message);
+      }
+      await updateVendor(payload);
+      Alert.alert('Mandali Updated', `${mandaliName.trim()} profile has been saved.`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreateMandali = async () => {
+    if (!newName.trim()) {
+      Alert.alert('Mandali Name', 'Please enter your Mandali group name.');
+      return;
+    }
+    if (addMandali) {
+      await addMandali({
+        name: newName.trim(),
+        city: newCity.trim() || vendor?.city || 'New Delhi',
+        capacity: newCapacity,
+        description: 'Traditional Pooja Mandali for all rituals',
+        active: true,
+      });
+    }
+    setNewName('');
+    setNewCity('');
     setAddModalVisible(false);
-    Alert.alert('Success', 'New Mandali has been registered!');
+    Alert.alert('Mandali Added', 'New Mandali has been created and selected.');
   };
 
   return (
-    <SafeAreaView style={s.safe} edges={['top', 'bottom', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FBF8F2" />
-      <View style={s.container}>
-        {/* Header */}
-        <View style={s.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={s.backBtn}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <Ionicons name="chevron-back" size={24} color="#4A0813" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Mandali Management</Text>
+        <TouchableOpacity
+          style={styles.addHeaderBtn}
+          onPress={() => setAddModalVisible(true)}
+        >
+          <Ionicons name="add-circle-outline" size={24} color="#67101F" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Sacred Mandali Hero Card */}
+        <View style={[styles.heroCard, shadow]}>
+          <Image
+            source={require('../../../assets/images/mandali_banner.jpg')}
+            style={styles.heroImage}
+            resizeMode="cover"
+          />
+          <LinearGradient
+            colors={['rgba(74, 8, 19, 0.15)', 'rgba(56, 5, 13, 0.85)']}
+            start={{ x: 0, y: 0.3 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.heroOverlay}
           >
-            <MaterialCommunityIcons name="chevron-left" size={28} color="#2E1418" />
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>My Mandali</Text>
-          <View style={{ width: 36 }} />
+            <Text style={styles.heroText}>Manage{'\n'}Your{'\n'}Mandali</Text>
+          </LinearGradient>
         </View>
 
-        <ScrollView
-          style={s.scroll}
-          contentContainerStyle={s.content}
-          showsVerticalScrollIndicator={false}
+        {/* Mandali Name */}
+        <Text style={styles.fieldLabel}>Mandali Name</Text>
+        <TextInput
+          style={styles.inputBox}
+          value={mandaliName}
+          onChangeText={setMandaliName}
+          placeholder="Shree Vedic Mandali"
+          placeholderTextColor="#9A8879"
+        />
+
+        {/* Description */}
+        <Text style={styles.fieldLabel}>Description</Text>
+        <TextInput
+          style={[styles.inputBox, styles.textArea]}
+          value={description}
+          onChangeText={setDescription}
+          placeholder="Traditional Pooja Mandali for all rituals"
+          placeholderTextColor="#9A8879"
+          multiline
+          textAlignVertical="top"
+        />
+
+        {/* Capacity Picker */}
+        <Text style={styles.fieldLabel}>Capacity</Text>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={styles.dropdownBox}
+          onPress={() => setCapModalVisible(true)}
         >
-          {/* Active Mandali Card */}
-          <View style={s.activeCard}>
-            <View style={s.mandaliIconCircle}>
-              <MaterialCommunityIcons name="account-group" size={26} color="#D48B28" />
-            </View>
+          <Text style={styles.dropdownValue}>{capacity}</Text>
+          <Ionicons name="chevron-down" size={18} color="#5D4037" />
+        </TouchableOpacity>
 
-            <View style={s.mandaliInfo}>
-              <Text style={s.mandaliTitle}>{activeMandali?.name}</Text>
-              <Text style={s.mandaliSub}>
-                {activeMandali?.pujaris} Pujaris • {activeMandali?.members} Members
-              </Text>
-            </View>
+        {/* Service Status Row */}
+        <View style={styles.statusRow}>
+          <Text style={[styles.fieldLabel, { marginBottom: 0 }]}>Service Status</Text>
+          <Switch
+            value={serviceActive}
+            onValueChange={setServiceActive}
+            trackColor={{ false: '#DFD2C3', true: '#1E8E4A' }}
+            thumbColor="#FFFFFF"
+          />
+        </View>
 
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => Alert.alert('Edit Mandali', `Editing settings for ${activeMandali?.name}`)}
-              style={s.editBtn}
-            >
-              <MaterialCommunityIcons name="pencil-outline" size={14} color="#67101F" style={{ marginRight: 4 }} />
-              <Text style={s.editBtnText}>Edit</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* + Add New Mandali Button */}
-          <TouchableOpacity
-            activeOpacity={0.88}
-            onPress={() => setAddModalVisible(true)}
-            style={s.addMandaliBtn}
+        {/* Maroon Update Profile CTA */}
+        <TouchableOpacity
+          activeOpacity={0.9}
+          disabled={saving}
+          onPress={handleUpdateMandali}
+          style={{ marginTop: 10 }}
+        >
+          <LinearGradient
+            colors={['#7E1627', '#530A17']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.updateBtn}
           >
-            <MaterialCommunityIcons name="plus" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
-            <Text style={s.addMandaliBtnText}>Add New Mandali</Text>
-          </TouchableOpacity>
+            {saving ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.updateBtnText}>Update Profile</Text>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
 
-          {/* Other Mandalis Section */}
-          <Text style={s.sectionTitle}>Other Mandalis</Text>
-
-          <View style={s.otherList}>
-            {otherMandalis.map((item) => (
-              <View key={item.id} style={s.otherCard}>
-                <View style={s.mandaliIconCircle}>
-                  <MaterialCommunityIcons name="account-group-outline" size={24} color="#D48B28" />
-                </View>
-
-                <View style={s.mandaliInfo}>
-                  <Text style={s.otherTitle}>{item.name}</Text>
-                  <Text style={s.otherSub}>
-                    {item.pujaris} Pujaris • {item.members} Members
-                  </Text>
-                </View>
-
+        {/* Registered Mandali Groups Switcher */}
+        {Array.isArray(mandalis) && mandalis.length > 0 && (
+          <View style={styles.groupsSection}>
+            <View style={styles.groupsHeader}>
+              <Text style={styles.sectionTitle}>Your Mandali Groups</Text>
+              <TouchableOpacity onPress={() => setAddModalVisible(true)}>
+                <Text style={styles.addLink}>+ New Mandali</Text>
+              </TouchableOpacity>
+            </View>
+            {mandalis.map((m, idx) => {
+              const selected = currentMandali?.id === m.id;
+              return (
                 <TouchableOpacity
+                  key={m.id || idx}
                   activeOpacity={0.85}
-                  onPress={() => {
-                    selectMandali(item.name);
-                    Alert.alert('Mandali Selected', `${item.name} is now your active pooja group.`);
-                  }}
-                  style={s.selectBtn}
+                  style={[styles.groupCard, selected && styles.groupCardActive, shadow]}
+                  onPress={() => selectMandali?.(m.id)}
                 >
-                  <Text style={s.selectBtnText}>Select</Text>
+                  <Image
+                    source={require('../../../assets/images/mandali_banner.jpg')}
+                    style={styles.groupThumb}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.groupName}>{m.name}</Text>
+                    <Text style={styles.groupMeta}>
+                      {m.capacity || '5-20 Members'} • {m.city || 'Vedic Group'}
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name={selected ? 'checkmark-circle' : 'chevron-forward'}
+                    size={20}
+                    color={selected ? '#1E8E4A' : '#8C7A6B'}
+                  />
                 </TouchableOpacity>
-              </View>
+              );
+            })}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Capacity Picker Modal */}
+      <Modal
+        visible={capModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCapModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setCapModalVisible(false)}
+        >
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Select Group Capacity</Text>
+            {CAPACITY_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt}
+                style={styles.modalItem}
+                onPress={() => {
+                  setCapacity(opt);
+                  setCapModalVisible(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.modalItemText,
+                    capacity === opt && { color: '#67101F', fontWeight: '700' },
+                  ]}
+                >
+                  {opt}
+                </Text>
+                {capacity === opt && (
+                  <Ionicons name="checkmark-circle" size={18} color="#1E8E4A" />
+                )}
+              </TouchableOpacity>
             ))}
           </View>
-        </ScrollView>
+        </TouchableOpacity>
+      </Modal>
 
-        {/* Add Mandali Modal */}
-        <Modal
-          visible={addModalVisible}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setAddModalVisible(false)}
-        >
-          <View style={s.modalOverlay}>
-            <View style={s.modalSheet}>
-              <View style={s.modalHandle} />
-              <Text style={s.modalTitle}>Add New Mandali</Text>
-
-              <View style={s.modalForm}>
-                <View style={s.fieldGroup}>
-                  <Text style={s.fieldLabel}>Mandali Name</Text>
-                  <TextInput
-                    style={s.modalInput}
-                    value={newMandaliName}
-                    onChangeText={setNewMandaliName}
-                    placeholder="e.g. Gayatri Mandali"
-                    placeholderTextColor="#A08E90"
-                  />
-                </View>
-
-                <View style={s.fieldRow}>
-                  <View style={[s.fieldGroup, { flex: 1 }]}>
-                    <Text style={s.fieldLabel}>Pujaris Count</Text>
-                    <TextInput
-                      style={s.modalInput}
-                      value={newPujaris}
-                      onChangeText={setNewPujaris}
-                      keyboardType="numeric"
-                    />
-                  </View>
-
-                  <View style={[s.fieldGroup, { flex: 1 }]}>
-                    <Text style={s.fieldLabel}>Members Count</Text>
-                    <TextInput
-                      style={s.modalInput}
-                      value={newMembers}
-                      onChangeText={setNewMembers}
-                      keyboardType="numeric"
-                    />
-                  </View>
-                </View>
-
-                <TouchableOpacity
-                  activeOpacity={0.88}
-                  onPress={handleCreateMandali}
-                  style={s.modalSubmitBtn}
-                >
-                  <Text style={s.modalSubmitBtnText}>Create Mandali</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={() => setAddModalVisible(false)}
-                  style={s.modalCancelBtn}
-                >
-                  <Text style={s.modalCancelBtnText}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
+      {/* Add New Mandali Modal */}
+      <Modal
+        visible={addModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAddModalVisible(false)}
+      >
+        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeadRow}>
+              <Text style={styles.modalTitle}>Create Mandali Group</Text>
+              <TouchableOpacity onPress={() => setAddModalVisible(false)}>
+                <Ionicons name="close" size={22} color="#4A0813" />
+              </TouchableOpacity>
             </View>
+            <Text style={styles.fieldLabel}>Group Name</Text>
+            <TextInput
+              style={styles.inputBox}
+              value={newName}
+              onChangeText={setNewName}
+              placeholder="e.g. Shree Hanuman Sundarkand Mandali"
+              placeholderTextColor="#9A8879"
+            />
+            <Text style={styles.fieldLabel}>Primary City</Text>
+            <TextInput
+              style={styles.inputBox}
+              value={newCity}
+              onChangeText={setNewCity}
+              placeholder="e.g. Varanasi / New Delhi"
+              placeholderTextColor="#9A8879"
+            />
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={handleCreateMandali}
+              style={{ marginTop: 8 }}
+            >
+              <LinearGradient
+                colors={['#7E1627', '#530A17']}
+                style={styles.updateBtn}
+              >
+                <Text style={styles.updateBtnText}>Create Mandali</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
-        </Modal>
-      </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-const s = StyleSheet.create({
+const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#FBF8F2',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#FBF8F2',
+    backgroundColor: '#FBF6EE',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFE4D6',
+    backgroundColor: '#FBF6EE',
   },
   backBtn: {
     width: 36,
     height: 36,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'flex-start',
+  },
+  addHeaderBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#2E1418',
-    fontFamily: 'serif',
+    fontFamily: serif,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#4A0813',
   },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-  },
-  activeCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+  scrollContent: {
     padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#EDE4DA',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-    marginBottom: 16,
+    paddingBottom: 36,
   },
-  mandaliIconCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#FDF5EA',
-    borderWidth: 1,
-    borderColor: '#F6E4CF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  mandaliInfo: {
-    flex: 1,
-  },
-  mandaliTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#2E1418',
-    marginBottom: 4,
-  },
-  mandaliSub: {
-    fontSize: 12.5,
-    color: '#7D686B',
-  },
-  editBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E8D4C8',
-    backgroundColor: '#FFFDFB',
-  },
-  editBtnText: {
-    fontSize: 12.5,
-    fontWeight: '600',
-    color: '#67101F',
-  },
-  addMandaliBtn: {
-    height: 50,
-    backgroundColor: '#67101F',
-    borderRadius: 25,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#67101F',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    elevation: 3,
-    marginBottom: 24,
-  },
-  addMandaliBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  sectionTitle: {
-    fontSize: 14.5,
-    fontWeight: '700',
-    color: '#7D686B',
-    marginBottom: 14,
-  },
-  otherList: {
-    gap: 12,
-  },
-  otherCard: {
-    backgroundColor: '#FFFFFF',
+  heroCard: {
+    height: 132,
     borderRadius: 16,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#EDE4DA',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
+    overflow: 'hidden',
+    marginBottom: 18,
+    backgroundColor: '#4A0813',
   },
-  otherTitle: {
-    fontSize: 14,
+  heroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingRight: 22,
+  },
+  heroText: {
+    fontFamily: serif,
+    fontSize: 19,
     fontWeight: '700',
-    color: '#2E1418',
-    marginBottom: 3,
-  },
-  otherSub: {
-    fontSize: 12,
-    color: '#7D686B',
-  },
-  selectBtn: {
-    backgroundColor: '#67101F',
-    paddingVertical: 7,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-  },
-  selectBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12.5,
-    fontWeight: '700',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-  },
-  modalHandle: {
-    width: 44,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#E0D4C8',
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#2E1418',
-    marginBottom: 16,
-    fontFamily: 'serif',
-  },
-  modalForm: {
-    gap: 14,
-  },
-  fieldGroup: {
-    gap: 6,
-  },
-  fieldRow: {
-    flexDirection: 'row',
-    gap: 12,
+    color: '#FBE8C6',
+    textAlign: 'center',
+    lineHeight: 24,
   },
   fieldLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#2E1418',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#3A1E19',
+    marginBottom: 7,
   },
-  modalInput: {
+  inputBox: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#EDE4DA',
+    borderColor: '#E5D8C8',
     paddingHorizontal: 14,
-    height: 48,
-    fontSize: 14.5,
-    color: '#2E1418',
+    paddingVertical: 11,
+    fontSize: 14,
+    color: '#2F1510',
+    marginBottom: 14,
   },
-  modalSubmitBtn: {
+  textArea: {
+    minHeight: 74,
+  },
+  dropdownBox: {
+    height: 46,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5D8C8',
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  dropdownValue: {
+    fontSize: 14,
+    color: '#2F1510',
+    fontWeight: '600',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  updateBtn: {
     height: 48,
-    backgroundColor: '#67101F',
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
   },
-  modalSubmitBtnText: {
+  updateBtnText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 15.5,
     fontWeight: '700',
   },
-  modalCancelBtn: {
-    alignItems: 'center',
-    paddingVertical: 10,
+  groupsSection: {
+    marginTop: 26,
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: '#EFE4D6',
   },
-  modalCancelBtnText: {
-    color: '#7D686B',
-    fontSize: 14,
+  groupsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontFamily: serif,
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#4A0813',
+  },
+  addLink: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#67101F',
+  },
+  groupCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#EADFD1',
+    marginBottom: 10,
+  },
+  groupCardActive: {
+    borderColor: '#1E8E4A',
+    backgroundColor: '#F4FBF6',
+  },
+  groupThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+  },
+  groupName: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: '#2F1510',
+  },
+  groupMeta: {
+    fontSize: 12,
+    color: '#7A6859',
+    marginTop: 2,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(30,10,8,0.45)',
+    justifyContent: 'center',
+    padding: 22,
+  },
+  modalSheet: {
+    backgroundColor: '#FBF6EE',
+    borderRadius: 18,
+    padding: 18,
+  },
+  modalHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  modalTitle: {
+    fontFamily: serif,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#4A0813',
+    marginBottom: 10,
+  },
+  modalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFE4D6',
+  },
+  modalItemText: {
+    fontSize: 14.5,
+    color: '#3A1E19',
   },
 });

@@ -37,6 +37,9 @@ export default function PendingScreen({ navigation, route }) {
     status: vendor?.status || 'Review',
     rejectionReason: null,
   });
+  const vendorRef = React.useRef(vendor);
+  vendorRef.current = vendor;
+  const approvedShownRef = React.useRef(false);
 
   const checkStatus = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -49,26 +52,29 @@ export default function PendingScreen({ navigation, route }) {
           rejectionReason: res.rejectionReason,
         });
 
-        if (res.kyc === 'Verified' || res.status === 'Active') {
+        if (res.kyc === 'Verified' || res.status === 'Active' || res.status === 'approved') {
           register({
-            ...vendor,
+            ...vendorRef.current,
             ...res.vendor,
             kyc: 'Verified',
             status: 'Active',
             verified: true,
           });
-          Alert.alert(
-            isHindi ? 'सत्यापन स्वीकृत! 🙏' : 'Verification Approved! 🙏',
-            isHindi
-              ? 'बधाई हो! आपकी प्रोफ़ाइल एडमिन द्वारा स्वीकृत कर दी गई है। अब आप सेवाएं प्राप्त करने हेतु तैयार हैं।'
-              : 'Congratulations! Your profile has been approved by admin. You can now accept booking requests.',
-            [
-              {
-                text: isHindi ? 'डैशबोर्ड में प्रवेश करें ›' : 'Enter Dashboard ›',
-                onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Main' }] }),
-              },
-            ]
-          );
+          if (!approvedShownRef.current) {
+            approvedShownRef.current = true;
+            Alert.alert(
+              isHindi ? 'सत्यापन स्वीकृत! 🙏' : 'Verification Approved! 🙏',
+              isHindi
+                ? 'बधाई हो! आपकी प्रोफ़ाइल एडमिन द्वारा स्वीकृत कर दी गई है। अब आप सेवाएं प्राप्त करने हेतु तैयार हैं।'
+                : 'Congratulations! Your profile has been approved by admin. You can now accept booking requests.',
+              [
+                {
+                  text: isHindi ? 'डैशबोर्ड में प्रवेश करें ›' : 'Enter Dashboard ›',
+                  onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Main' }] }),
+                },
+              ]
+            );
+          }
         } else if (res.kyc === 'Rejected') {
           Alert.alert(
             isHindi ? 'आवेदन अस्वीकृत' : 'Application Rejected',
@@ -94,15 +100,16 @@ export default function PendingScreen({ navigation, route }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [identifier, vendor, register, navigation, isHindi]);
+  }, [identifier, register, navigation, isHindi]);
 
   useEffect(() => {
     checkStatus(true);
 
-    socket.connect();
+    socket.connect(null, vendorRef.current?.id || vendorRef.current?._id);
     const handleLiveApproval = (updated) => {
       if (!updated) return;
-      const matchId = updated.id && (updated.id === vendor?.id);
+      const vCur = vendorRef.current;
+      const matchId = updated.id && updated.id === vCur?.id;
       const matchEmail = updated.email && (updated.email.toLowerCase().trim() === email?.toLowerCase().trim() || updated.email.toLowerCase().trim() === identifier?.toLowerCase().trim());
       const matchPhone = updated.phone && (updated.phone.trim() === phone?.trim() || updated.phone.trim() === identifier?.trim());
 
@@ -113,26 +120,29 @@ export default function PendingScreen({ navigation, route }) {
           rejectionReason: updated.rejectionReason,
         });
 
-        if (updated.kyc === 'Verified' || updated.status === 'Active') {
+        if (updated.kyc === 'Verified' || updated.status === 'Active' || updated.status === 'approved') {
           register({
-            ...vendor,
+            ...vCur,
             ...updated,
             kyc: 'Verified',
             status: 'Active',
             verified: true,
           });
-          Alert.alert(
-            isHindi ? 'सत्यापन स्वीकृत! 🙏' : 'Verification Approved! 🙏',
-            isHindi
-              ? 'बधाई हो! आपकी प्रोफ़ाइल एडमिन द्वारा स्वीकृत कर दी गई है। अब आप सेवाएं प्राप्त करने हेतु तैयार हैं।'
-              : 'Congratulations! Your profile has been approved by admin. You can now accept booking requests.',
-            [
-              {
-                text: isHindi ? 'डैशबोर्ड में प्रवेश करें ›' : 'Enter Dashboard ›',
-                onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Main' }] }),
-              },
-            ]
-          );
+          if (!approvedShownRef.current) {
+            approvedShownRef.current = true;
+            Alert.alert(
+              isHindi ? 'सत्यापन स्वीकृत! 🙏' : 'Verification Approved! 🙏',
+              isHindi
+                ? 'बधाई हो! आपकी प्रोफ़ाइल एडमिन द्वारा स्वीकृत कर दी गई है। अब आप सेवाएं प्राप्त करने हेतु तैयार हैं।'
+                : 'Congratulations! Your profile has been approved by admin. You can now accept booking requests.',
+              [
+                {
+                  text: isHindi ? 'डैशबोर्ड में प्रवेश करें ›' : 'Enter Dashboard ›',
+                  onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Main' }] }),
+                },
+              ]
+            );
+          }
         }
       }
     };
@@ -146,7 +156,7 @@ export default function PendingScreen({ navigation, route }) {
       unsub2 && unsub2();
       unsub3 && unsub3();
     };
-  }, [checkStatus, vendor, email, phone, identifier, register, navigation, isHindi]);
+  }, [checkStatus, email, phone, identifier, register, navigation, isHindi]);
 
   const onRefresh = () => {
     setRefreshing(true);

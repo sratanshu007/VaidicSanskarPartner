@@ -17,15 +17,14 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePartner, ROLES } from '../../context/PartnerContext';
 import { VendorService, setAuthToken } from '../../services/api';
 import socket from '../../services/socket';
-import colors from '../../theme/colors';
+import { serif } from '../../theme/styles';
 
 const TEMPLE_IMAGE = require('../../../assets/sacred_temple_emblem.png');
 
-// Only the 3 partner roles (Merchant and Temple Admin completely removed)
 const PARTNER_ROLES = [
-  { key: ROLES.PANDIT, label: 'Pandit', icon: 'fire', sub: 'Pooja & Rituals' },
-  { key: ROLES.ASTRO, label: 'Astrologer', icon: 'creation', sub: 'Kundali & Consultation' },
-  { key: ROLES.MANDALI, label: 'Mandali', icon: 'account-group', sub: 'Bhajan & Kirtan' },
+  { key: ROLES.PANDIT, label: 'Pandit', icon: 'fire' },
+  { key: ROLES.ASTRO, label: 'Astrologer', icon: 'creation' },
+  { key: ROLES.MANDALI, label: 'Mandali', icon: 'account-group' },
 ];
 
 export default function LoginScreen({ navigation }) {
@@ -42,7 +41,7 @@ export default function LoginScreen({ navigation }) {
     const pass = password.trim();
 
     if (!query) {
-      Alert.alert('Required', 'Please enter your email or phone number');
+      Alert.alert('Required', 'Please enter your mobile number or email');
       return;
     }
     if (!pass) {
@@ -56,59 +55,59 @@ export default function LoginScreen({ navigation }) {
       if (res?.success && res?.vendor) {
         if (res.token) setAuthToken(res.token);
         const v = res.vendor;
-        const resolvedRole = v.role || selectedRole;
+        const resolvedRole = selectedRole === ROLES.ASTRO ? ROLES.ASTRO : (v.role || selectedRole);
         setRole(resolvedRole);
-        register(v, res.token);
+        register({ ...v, role: resolvedRole }, res.token);
 
-        // Immediate Live Socket Connection & Presence Broadcast
-        socket.connect(res.token);
-        socket.emit('astro:online', {
-          id: v.id || v._id || 'V4569',
-          vendorId: v.id || v._id || 'V4569',
-          name: v.name || 'पंडित जी (Live Partner)',
-          nameHi: v.name || 'पंडित जी (Live Partner)',
-          title: 'सत्यापित वैदिक ज्योतिषी • पार्टनर ऐप लाइव',
-          isOnline: true,
-          rates: { chat: 5, audio: 5, video: 5 },
-          rating: 5.0,
-          skills: ['Vedic', 'KP Astrology', 'Kundli'],
-        });
+        const partnerId = v.id || v._id || (resolvedRole === ROLES.ASTRO ? 'ASTRO-7890' : 'PND-VERIFIED');
+        socket.connect(res.token, partnerId);
+        if (resolvedRole === ROLES.ASTRO || v.isAstroEnabled) {
+          socket.emit('astro:online', {
+            id: partnerId,
+            vendorId: partnerId,
+            name: v.name || 'आचार्य जी (Live Astrologer)',
+            nameHi: v.name || 'आचार्य जी (Live Astrologer)',
+            title:
+              resolvedRole === ROLES.ASTRO
+                ? 'सत्यापित वैदिक ज्योतिषाचार्य • पार्टनर ऐप लाइव'
+                : 'सत्यापित वैदिक पंडित व ज्योतिषाचार्य • पार्टनर ऐप लाइव',
+            isOnline: true,
+            rates: { chat: 5, audio: 5, video: 5 },
+            rating: 4.98,
+            skills: ['Vedic', 'KP Astrology', 'Kundli'],
+          });
+        }
 
-        const isApproved = v.status === 'Active' || v.kyc === 'Verified';
+        const isApproved = v.status === 'Active' || v.kyc === 'Verified' || v.status === 'approved';
         const isIncomplete = v.profileCompleted === false || v.status === 'Incomplete';
 
         if (isApproved) {
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'Main' }],
-          });
+          navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
         } else if (isIncomplete) {
           Alert.alert(
             'Complete Your Profile',
             'Please complete your profile details and service selection for admin verification.'
           );
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'ProfileSetup' }],
-          });
+          navigation.reset({ index: 0, routes: [{ name: 'ProfileSetup' }] });
         } else {
-          // Awaiting Admin Verification / Approval
           navigation.reset({
             index: 0,
-            routes: [{
-              name: 'Pending',
-              params: {
-                email: v.email,
-                phone: v.phone,
-                name: v.name,
-                role: resolvedRole,
+            routes: [
+              {
+                name: 'Pending',
+                params: {
+                  email: v.email,
+                  phone: v.phone,
+                  name: v.name,
+                  role: resolvedRole,
+                },
               },
-            }],
+            ],
           });
         }
         return;
       } else {
-        Alert.alert('Login Notice', res?.message || 'Invalid credentials. Please verify your email and password.');
+        Alert.alert('Login Notice', res?.message || 'Invalid credentials. Please verify your mobile/email and password.');
       }
     } catch (err) {
       const errMsg = err?.message || 'Could not verify credentials.';
@@ -118,11 +117,18 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
+  const handleGoogleContinue = () => {
+    Alert.alert(
+      'Google Sign-In',
+      'Please sign in with your registered mobile number / email and password, or tap Sign Up to register as a Partner.'
+    );
+  };
+
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FBF8F2" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FBF6EE" />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <ScrollView
@@ -131,109 +137,121 @@ export default function LoginScreen({ navigation }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Top Temple Branding matching Screen 1 & 15 */}
+          {/* Sacred Branding Header */}
           <View style={s.brandingContainer}>
-            <Image
-              source={TEMPLE_IMAGE}
-              style={s.templeLogo}
-              resizeMode="contain"
-            />
+            <Image source={TEMPLE_IMAGE} style={s.templeLogo} resizeMode="contain" />
             <Text style={s.brandTitle}>VaidicSanskar</Text>
-            <Text style={s.brandTagline}>Service • Devotion • Trust</Text>
+            <Text style={s.brandPartner}>Vendor Partner</Text>
           </View>
 
-          <View style={s.loginCard}>
-            <Text style={s.loginHeading}>Partner Login</Text>
-            <Text style={s.loginSub}>Sign in to manage your bookings and services</Text>
+          <Text style={s.welcomeHeading}>Welcome Back</Text>
+          <Text style={s.welcomeSub}>Login to manage your services</Text>
 
-            {/* Role Switcher: ONLY 3 ROLES (Pandit, Astrologer, Mandali) */}
-            <View style={s.roleSelector}>
-              {PARTNER_ROLES.map((r) => {
-                const isActive = selectedRole === r.key;
-                return (
-                  <TouchableOpacity
-                    key={r.key}
-                    activeOpacity={0.8}
-                    onPress={() => setSelectedRole(r.key)}
-                    style={[s.roleTab, isActive && s.roleTabActive]}
-                  >
-                    <MaterialCommunityIcons
-                      name={r.icon}
-                      size={20}
-                      color={isActive ? '#FFFFFF' : '#7D686B'}
-                    />
-                    <Text style={[s.roleTabText, isActive && s.roleTabTextActive]}>
-                      {r.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+          {/* Compact Role Pills */}
+          <View style={s.roleSelector}>
+            {PARTNER_ROLES.map((r) => {
+              const isActive = selectedRole === r.key;
+              return (
+                <TouchableOpacity
+                  key={r.key}
+                  activeOpacity={0.85}
+                  onPress={() => setSelectedRole(r.key)}
+                  style={[s.rolePill, isActive && s.rolePillActive]}
+                >
+                  <MaterialCommunityIcons
+                    name={r.icon}
+                    size={16}
+                    color={isActive ? '#FFFFFF' : '#67101F'}
+                  />
+                  <Text style={[s.rolePillText, isActive && s.rolePillTextActive]}>
+                    {r.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Clean Form Inputs matching Screen 2 */}
+          <View style={s.form}>
+            <View style={s.inputWrap}>
+              <View style={s.inputIconCircle}>
+                <MaterialCommunityIcons name="account-outline" size={18} color="#67101F" />
+              </View>
+              <TextInput
+                style={s.input}
+                value={identifier}
+                onChangeText={setIdentifier}
+                placeholder="Mobile Number / Email"
+                placeholderTextColor="#9A8588"
+                autoCapitalize="none"
+              />
             </View>
 
-            {/* Inputs */}
-            <View style={s.form}>
-              <View style={s.fieldGroup}>
-                <Text style={s.fieldLabel}>Mobile Number / Email</Text>
-                <View style={s.inputWrap}>
-                  <MaterialCommunityIcons name="account-outline" size={20} color="#7D686B" style={{ marginRight: 10 }} />
-                  <TextInput
-                    style={s.input}
-                    value={identifier}
-                    onChangeText={setIdentifier}
-                    placeholder="Enter phone or email"
-                    placeholderTextColor="#A08E90"
-                    autoCapitalize="none"
-                  />
-                </View>
+            <View style={s.inputWrap}>
+              <View style={s.inputIconCircle}>
+                <MaterialCommunityIcons name="lock-outline" size={18} color="#67101F" />
               </View>
-
-              <View style={s.fieldGroup}>
-                <Text style={s.fieldLabel}>Password</Text>
-                <View style={s.inputWrap}>
-                  <MaterialCommunityIcons name="lock-outline" size={20} color="#7D686B" style={{ marginRight: 10 }} />
-                  <TextInput
-                    style={s.input}
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="Enter password"
-                    placeholderTextColor="#A08E90"
-                    secureTextEntry={!showPassword}
-                  />
-                  <TouchableOpacity
-                    onPress={() => setShowPassword(!showPassword)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <MaterialCommunityIcons
-                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                      size={20}
-                      color="#7D686B"
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
+              <TextInput
+                style={s.input}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Password"
+                placeholderTextColor="#9A8588"
+                secureTextEntry={!showPassword}
+              />
               <TouchableOpacity
-                activeOpacity={0.88}
-                onPress={handleLogin}
-                style={s.loginBtn}
-                disabled={loading}
+                onPress={() => setShowPassword(!showPassword)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Text style={s.loginBtnText}>
-                  {loading ? 'Logging in...' : 'Login'}
-                </Text>
+                <MaterialCommunityIcons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={20}
+                  color="#7D686B"
+                />
               </TouchableOpacity>
             </View>
 
-            {/* Switch to Registration */}
             <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => navigation.navigate('Register')}
-              style={s.registerLink}
+              activeOpacity={0.88}
+              onPress={handleLogin}
+              style={s.loginBtn}
+              disabled={loading}
             >
-              <Text style={s.registerLinkText}>
-                New Partner? <Text style={s.registerLinkBold}>Get Started / Register</Text>
+              <Text style={s.loginBtnText}>
+                {loading ? 'Logging in...' : 'Login'}
               </Text>
             </TouchableOpacity>
+
+            <View style={s.orRow}>
+              <View style={s.orLine} />
+              <Text style={s.orText}>or</Text>
+              <View style={s.orLine} />
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={handleGoogleContinue}
+              style={s.googleBtn}
+            >
+              <MaterialCommunityIcons name="google" size={19} color="#DB4437" style={{ marginRight: 10 }} />
+              <Text style={s.googleBtnText}>Continue with Google</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Bottom Sign Up Link */}
+          <TouchableOpacity
+            activeOpacity={0.75}
+            onPress={() => navigation.navigate('Register', { role: selectedRole })}
+            style={s.registerLink}
+          >
+            <Text style={s.registerLinkText}>
+              Don't have an account? <Text style={s.registerLinkBold}>Sign Up</Text>
+            </Text>
+          </TouchableOpacity>
+
+          {/* Subtle Lotus Ornament */}
+          <View style={s.bottomOrnament}>
+            <MaterialCommunityIcons name="spa" size={44} color="rgba(212, 139, 40, 0.2)" />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -242,158 +260,172 @@ export default function LoginScreen({ navigation }) {
 }
 
 const s = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#FBF8F2',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#FBF8F2',
-  },
+  safe: { flex: 1, backgroundColor: '#FBF6EE' },
+  container: { flex: 1, backgroundColor: '#FBF6EE' },
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 32,
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 22,
+    paddingBottom: 28,
+    justifyContent: 'center',
   },
   brandingContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 18,
   },
   templeLogo: {
-    width: 140,
-    height: 110,
+    width: 96,
+    height: 78,
   },
   brandTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '800',
     color: '#67101F',
-    letterSpacing: 0.5,
-    fontFamily: 'serif',
+    fontFamily: serif,
+    letterSpacing: 0.4,
     marginTop: 4,
   },
-  brandTagline: {
-    fontSize: 12,
-    color: '#7D686B',
-    marginTop: 2,
-    letterSpacing: 1.2,
-    fontWeight: '500',
-  },
-  loginCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 22,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: '#F0E6DC',
-  },
-  loginHeading: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#2E1418',
-    textAlign: 'center',
-    fontFamily: 'serif',
-  },
-  loginSub: {
+  brandPartner: {
     fontSize: 12.5,
     color: '#7D686B',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  welcomeHeading: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#2E1418',
+    fontFamily: serif,
+    textAlign: 'center',
+  },
+  welcomeSub: {
+    fontSize: 13,
+    color: '#7D686B',
     textAlign: 'center',
     marginTop: 4,
-    marginBottom: 20,
+    marginBottom: 18,
   },
   roleSelector: {
     flexDirection: 'row',
-    backgroundColor: '#F7EFE6',
-    borderRadius: 14,
-    padding: 4,
-    marginBottom: 22,
-    gap: 4,
+    gap: 8,
+    marginBottom: 18,
   },
-  roleTab: {
+  rolePill: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
-    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8DAC8',
+    gap: 5,
   },
-  roleTabActive: {
+  rolePillActive: {
     backgroundColor: '#67101F',
-    shadowColor: '#67101F',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 2,
+    borderColor: '#67101F',
   },
-  roleTabText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#7D686B',
-  },
-  roleTabTextActive: {
-    color: '#FFFFFF',
+  rolePillText: {
+    fontSize: 12.5,
     fontWeight: '700',
+    color: '#4A2B2F',
+  },
+  rolePillTextActive: {
+    color: '#FFFFFF',
   },
   form: {
-    gap: 16,
-  },
-  fieldGroup: {
-    gap: 6,
-  },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#2E1418',
+    gap: 14,
   },
   inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#EDE4DA',
+    borderColor: '#E8DAC8',
     paddingHorizontal: 14,
-    height: 50,
-    flexDirection: 'row',
+    height: 54,
+  },
+  inputIconCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#FDF3E3',
     alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
   input: {
     flex: 1,
     fontSize: 14.5,
     color: '#2E1418',
+    fontWeight: '500',
   },
   loginBtn: {
-    height: 52,
     backgroundColor: '#67101F',
-    borderRadius: 26,
+    borderRadius: 14,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 4,
     shadowColor: '#67101F',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 4,
-    marginTop: 8,
   },
   loginBtnText: {
     color: '#FFFFFF',
     fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  orRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  orLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E8DAC8',
+  },
+  orText: {
+    paddingHorizontal: 12,
+    fontSize: 12.5,
+    color: '#8B7578',
+    fontWeight: '600',
+  },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8DAC8',
+    height: 50,
+  },
+  googleBtnText: {
+    fontSize: 14.5,
     fontWeight: '700',
-    letterSpacing: 0.4,
+    color: '#2E1418',
   },
   registerLink: {
-    marginTop: 20,
+    marginTop: 22,
     alignItems: 'center',
-    paddingVertical: 6,
   },
   registerLinkText: {
-    fontSize: 13,
+    fontSize: 13.5,
     color: '#7D686B',
   },
   registerLinkBold: {
     color: '#67101F',
-    fontWeight: '700',
+    fontWeight: '800',
+  },
+  bottomOrnament: {
+    alignItems: 'center',
+    marginTop: 18,
   },
 });

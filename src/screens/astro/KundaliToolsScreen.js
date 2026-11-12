@@ -36,7 +36,10 @@ export default function KundaliToolsScreen({ navigation }) {
     <View style={[s.container, { paddingTop: insets.top }]}>
       {/* Navigation Header */}
       <View style={s.navHeader}>
-        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={s.backBtn}
+          onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('AstroHome'))}
+        >
           <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={{ flex: 1, marginLeft: 10 }}>
@@ -76,7 +79,7 @@ export default function KundaliToolsScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Mode 1: Kundali Generator */}
         {toolMode === 'kundali' && (
           <View>

@@ -4,15 +4,9 @@
     "slug": "vaidic-sanskar-partner",
     "scheme": "vaidic-sanskar-partner",
     "version": "1.0.0",
-    "sdkVersion": "57.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#8B1A1A"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -31,6 +25,7 @@
     },
     "android": {
       "package": "com.deificdigital.paramparapartner",
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.ACCESS_FINE_LOCATION",
@@ -49,10 +44,20 @@
     },
     "plugins": [
       "expo-location",
-      "expo-image-picker"
+      "expo-image-picker",
+      "expo-status-bar",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#8B1A1A"
+        }
+      ]
     ],
     "extra": {
-      "agoraAppId": "aab8b8f5a8cd4469ab6e44298d9c22d9",
+      "agoraAppId": "c24160ab909f4ab089971d527d05a89b",
       "eas": {
         "projectId": "b2d1a695-d316-4fc5-b457-743627dfd458"
       }

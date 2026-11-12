@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePartner } from '../../context/PartnerContext';
 import { useNotification } from '../../context/NotificationContext';
-import colors from '../../theme/colors';
+import { serif } from '../../theme/styles';
 
 const CATEGORIES = ['All', 'Jobs & Puja', 'SMS & OTP', 'Updates'];
 
@@ -20,7 +20,6 @@ export default function NotificationsScreen({ navigation }) {
   const { notificationHistory, clearAllNotifications } = useNotification();
   const [selectedCategory, setSelectedCategory] = useState('All');
 
-  // Merge live notifications with any partner mock updates
   const combined = [
     ...(notificationHistory || []).map((n) => ({
       id: n.id,
@@ -28,16 +27,18 @@ export default function NotificationsScreen({ navigation }) {
       subtitle: n.message,
       otp: n.otp,
       time: n.createdAt || 'Just now',
-      date: n.date || '',
       type: n.type === 'job' || n.type === 'booking' ? 'Jobs & Puja' : (n.otp || n.type === 'sms' ? 'SMS & OTP' : 'Updates'),
-      icon: n.type === 'job' || n.type === 'booking' ? 'fire' : (n.otp ? 'shield-key' : 'bell-ring'),
-      color: n.type === 'job' || n.type === 'booking' ? '#D48B28' : (n.otp ? '#1E8E4A' : '#67101F'),
-      actionText: n.actionText,
+      icon: n.type === 'job' || n.type === 'booking' ? 'bell' : (n.otp ? 'shield-key' : 'bell'),
+      color: n.otp ? '#1E8E4A' : '#E0821D',
+      bg: n.otp ? '#EBF8F0' : '#FFF2DF',
       onAction: n.onAction,
     })),
     ...(mockNotifications || []).map((m) => ({
       ...m,
       type: m.type === 'Bookings' ? 'Jobs & Puja' : (m.type === 'Messages' ? 'SMS & OTP' : 'Updates'),
+      icon: 'bell',
+      color: '#E0821D',
+      bg: '#FFF2DF',
     })),
   ];
 
@@ -47,9 +48,9 @@ export default function NotificationsScreen({ navigation }) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FBF8F2" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FBF6EE" />
       <View style={s.container}>
-        {/* Header */}
+        {/* Header matching Screen 12 */}
         <View style={s.header}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
@@ -58,18 +59,23 @@ export default function NotificationsScreen({ navigation }) {
           >
             <MaterialCommunityIcons name="chevron-left" size={28} color="#2E1418" />
           </TouchableOpacity>
-          <Text style={s.headerTitle}>Notification Center</Text>
+          <Text style={s.headerTitle}>Notifications</Text>
           {combined.length > 0 ? (
             <TouchableOpacity onPress={clearAllNotifications} style={s.clearBtn}>
               <Text style={s.clearBtnText}>Clear</Text>
             </TouchableOpacity>
           ) : (
-            <View style={{ width: 36 }} />
+            <View style={{ width: 42 }} />
           )}
         </View>
 
-        {/* Filter Pills */}
-        <View style={s.tabContainer}>
+        {/* Compact Filter Pills */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.tabContainer}
+          style={{ flexGrow: 0 }}
+        >
           {CATEGORIES.map((cat) => {
             const isActive = selectedCategory === cat;
             return (
@@ -83,7 +89,7 @@ export default function NotificationsScreen({ navigation }) {
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
 
         <ScrollView
           style={s.scroll}
@@ -93,11 +99,11 @@ export default function NotificationsScreen({ navigation }) {
           {filtered.length === 0 ? (
             <View style={s.emptyState}>
               <View style={s.emptyIconCircle}>
-                <MaterialCommunityIcons name="bell-badge-outline" size={40} color="#B79E88" />
+                <MaterialCommunityIcons name="bell-outline" size={38} color="#D48B28" />
               </View>
-              <Text style={s.emptyTitle}>कोई सूचना नहीं है (No Notifications)</Text>
+              <Text style={s.emptyTitle}>No Notifications Yet</Text>
               <Text style={s.emptySub}>
-                नए पूजा अनुरोध, OTP सत्यापन व भुगतान अपडेट यहाँ प्राप्त होंगे।
+                New booking requests, payment alerts, and OTP updates will appear here.
               </Text>
             </View>
           ) : (
@@ -109,11 +115,11 @@ export default function NotificationsScreen({ navigation }) {
                   onPress={item.onAction}
                   style={s.notificationCard}
                 >
-                  <View style={[s.iconCircle, { backgroundColor: item.color ? item.color + '15' : '#FAF0E4' }]}>
+                  <View style={[s.iconCircle, { backgroundColor: item.bg || '#FFF2DF' }]}>
                     <MaterialCommunityIcons
-                      name={item.icon || 'bell-outline'}
+                      name={item.icon || 'bell'}
                       size={22}
-                      color={item.color || '#67101F'}
+                      color={item.color || '#E0821D'}
                     />
                   </View>
 
@@ -123,7 +129,6 @@ export default function NotificationsScreen({ navigation }) {
                       <Text style={s.timeText}>{item.time}</Text>
                     </View>
                     <Text style={s.notificationSub}>{item.subtitle}</Text>
-
                     {item.otp ? (
                       <View style={s.otpBadge}>
                         <MaterialCommunityIcons name="shield-key" size={13} color="#15803D" />
@@ -142,84 +147,61 @@ export default function NotificationsScreen({ navigation }) {
 }
 
 const s = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#FBF8F2',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#FBF8F2',
-  },
+  safe: { flex: 1, backgroundColor: '#FBF6EE' },
+  container: { flex: 1, backgroundColor: '#FBF6EE' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: 16,
+    paddingBottom: 14,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
+  backBtn: { width: 42, height: 36, justifyContent: 'center', alignItems: 'flex-start' },
+  headerTitle: { fontSize: 19, fontWeight: '800', color: '#2E1418', fontFamily: serif },
+  clearBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: '#F2E7D8',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#2E1418',
-    fontFamily: 'serif',
-  },
+  clearBtnText: { fontSize: 12, fontWeight: '700', color: '#67101F' },
   tabContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    marginBottom: 18,
-    gap: 10,
+    paddingBottom: 16,
+    gap: 8,
   },
   tabPill: {
-    paddingVertical: 8,
-    paddingHorizontal: 18,
+    paddingVertical: 7,
+    paddingHorizontal: 16,
     borderRadius: 20,
-    backgroundColor: '#F2EAE1',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E8DCD0',
+    borderColor: '#E8DAC8',
   },
   tabPillActive: {
     backgroundColor: '#67101F',
     borderColor: '#67101F',
   },
-  tabText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#5C4447',
-  },
-  tabTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-  },
-  list: {
-    gap: 12,
-  },
+  tabText: { fontSize: 12.5, fontWeight: '600', color: '#5C4447' },
+  tabTextActive: { color: '#FFFFFF', fontWeight: '700' },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: 20, paddingBottom: 32 },
+  list: { gap: 12 },
   notificationCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     borderWidth: 1,
-    borderColor: '#EDE4DA',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
+    borderColor: '#EFE2D1',
+    shadowColor: '#67101F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
   iconCircle: {
     width: 44,
@@ -229,89 +211,48 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 14,
   },
-  notificationInfo: {
-    flex: 1,
-    marginRight: 8,
-  },
-  notificationTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#2E1418',
-    marginBottom: 2,
-  },
-  notificationSub: {
-    fontSize: 12,
-    color: '#7D686B',
-  },
-  timeText: {
-    fontSize: 11.5,
-    color: '#A08E90',
-  },
-  clearBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: '#FAF0E4',
-  },
-  clearBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#67101F',
-  },
+  notificationInfo: { flex: 1 },
   rowTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 3,
+    marginBottom: 4,
   },
+  notificationTitle: { fontSize: 14.5, fontWeight: '800', color: '#2E1418', flex: 1, marginRight: 8 },
+  notificationSub: { fontSize: 12.5, color: '#6E5A5E', lineHeight: 18 },
+  timeText: { fontSize: 11, color: '#9E888A', fontWeight: '600' },
   otpBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#DCFCE7',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginTop: 6,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
     alignSelf: 'flex-start',
+    marginTop: 8,
+    gap: 5,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
   },
-  otpBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#15803D',
-    letterSpacing: 0.5,
-  },
+  otpBadgeText: { fontSize: 11.5, fontWeight: '800', color: '#15803D' },
   emptyState: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 32,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: '#EFE2D1',
+    marginTop: 20,
   },
   emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#FAF5EE',
-    borderWidth: 1,
-    borderColor: '#EDE4DA',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#FFF2DF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#2E1418',
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  emptySub: {
-    fontSize: 13,
-    color: '#7D686B',
-    textAlign: 'center',
-    lineHeight: 18,
-    maxWidth: 280,
-  },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: '#2E1418', fontFamily: serif },
+  emptySub: { fontSize: 13, color: '#7D686B', textAlign: 'center', marginTop: 6, lineHeight: 19 },
 });

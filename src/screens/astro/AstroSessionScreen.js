@@ -14,12 +14,15 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import colors from '../../theme/colors';
 import styles, { serif, radius, shadow } from '../../theme/styles';
+import { usePartner } from '../../context/PartnerContext';
 import partnerAstroStore from '../../services/talkToAstroStore';
 import AgoraCallView from '../../components/agora/AgoraCallView';
 import socket from '../../services/socket';
+import { useKeyboardLift } from '../../utils/useKeyboardLift';
 
 export default function AstroSessionScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { addEarning } = usePartner();
   const [session, setSession] = useState(partnerAstroStore.getActiveSession());
   const [activeTab, setActiveTab] = useState('session'); // session | kundali | notes
   const [elapsed, setElapsed] = useState(0);
@@ -31,6 +34,10 @@ export default function AstroSessionScreen({ navigation }) {
   const [isFrontCam, setIsFrontCam] = useState(true);
 
   const timerRef = useRef();
+  const chatScrollRef = useRef();
+  const { androidLift, onContainerLayout } = useKeyboardLift(() => {
+    chatScrollRef.current?.scrollToEnd({ animated: true });
+  });
 
   useEffect(() => {
     timerRef.current = setInterval(() => {
@@ -88,6 +95,7 @@ export default function AstroSessionScreen({ navigation }) {
       senderName: 'ज्योतिषाचार्य (Astrologer)',
       recipientId: session?.userId || 'U101',
       sessionId: session?.id,
+      channelName: session?.channelName,
     });
     setChatInput('');
   };
@@ -114,6 +122,9 @@ export default function AstroSessionScreen({ navigation }) {
               recipientId: 'V4569',
             });
             partnerAstroStore.endSession();
+            if (typeof addEarning === 'function') {
+              addEarning(netEarningsAccrued, 'Astro Chat Consultation');
+            }
             Alert.alert('सत्र संपन्न', `₹${netEarningsAccrued} मानदेय आपके वॉलेट में क्रेडिट हो गया है।`);
             navigation.goBack();
           },
@@ -133,12 +144,24 @@ export default function AstroSessionScreen({ navigation }) {
     );
   }
 
-  const kundali = session.birthDetails.kundali;
+  const kundali = session?.birthDetails?.kundali || {
+    lagna: 'सिंह (Leo)',
+    rashi: 'वृश्चिक (Scorpio)',
+    nakshatra: 'अनुराधा (चरण 2)',
+    dasha: 'बुध महादशा • शुक्र अंतर्दशा',
+    favorablePlanets: 'सूर्य, मंगल, गुरु',
+    remedyRecommended: 'आदित्य हृदय स्तोत्र पाठ, सूर्य को अर्घ्य',
+  };
 
   return (
     <KeyboardAvoidingView
+      onLayout={onContainerLayout}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={[s.container, { paddingTop: insets.top }]}
+      style={[
+        s.container,
+        { paddingTop: insets.top },
+        Platform.OS === 'android' && androidLift > 0 ? { paddingBottom: androidLift } : null,
+      ]}
     >
       {/* Top Header Bar */}
       <View style={s.navHeader}>
@@ -217,7 +240,14 @@ export default function AstroSessionScreen({ navigation }) {
         {activeTab === 'session' && (
           <View style={{ flex: 1 }}>
             {session.mode === 'chat' ? (
-              <ScrollView contentContainerStyle={s.chatList} showsVerticalScrollIndicator={false}>
+              <ScrollView
+                ref={chatScrollRef}
+                contentContainerStyle={[s.chatList, { flexGrow: 1 }]}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+                onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
+              >
                 {session.chatMessages.map((m) => {
                   const isAstro = m.sender === 'astrologer';
                   return (
@@ -298,15 +328,28 @@ export default function AstroSessionScreen({ navigation }) {
 
             {/* Chat Input Bar if chat mode */}
             {session.mode === 'chat' && (
-              <View style={[s.chatInputBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+              <View
+                style={[
+                  s.chatInputBar,
+                  { paddingBottom: androidLift > 0 ? 8 : Math.max(insets.bottom, 8) },
+                ]}
+              >
                 <TextInput
                   style={s.chatInput}
                   value={chatInput}
                   onChangeText={setChatInput}
+                  onFocus={() => setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 120)}
                   placeholder="यजमान को उत्तर लिखें..."
                   placeholderTextColor="#A8988C"
+                  multiline
+                  maxLength={1000}
+                  textAlignVertical="center"
                 />
-                <TouchableOpacity style={s.sendBtn} onPress={handleSendMessage}>
+                <TouchableOpacity
+                  style={[s.sendBtn, !chatInput.trim() && { opacity: 0.55 }]}
+                  onPress={handleSendMessage}
+                  disabled={!chatInput.trim()}
+                >
                   <MaterialCommunityIcons name="send" size={18} color="#FFFFFF" />
                 </TouchableOpacity>
               </View>
@@ -621,11 +664,13 @@ const s = StyleSheet.create({
   },
   chatInput: {
     flex: 1,
+    minHeight: 40,
+    maxHeight: 100,
     backgroundColor: '#FAF7F0',
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    fontSize: 13,
+    fontSize: 13.5,
     color: colors.text,
     borderWidth: 1,
     borderColor: '#ECE3D7',

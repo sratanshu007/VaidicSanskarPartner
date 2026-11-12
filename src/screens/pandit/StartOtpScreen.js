@@ -8,6 +8,8 @@ import {
   ScrollView,
   StatusBar,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
@@ -17,7 +19,7 @@ import styles, { serif, shadow } from '../../theme/styles';
 import { Header } from '../../components/ui';
 import panditBookingStore from '../../services/panditBookingStore';
 import socket from '../../services/socket';
-import api from '../../services/api';
+import api, { JobService } from '../../services/api';
 
 export default function StartOtpScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
@@ -58,34 +60,65 @@ export default function StartOtpScreen({ navigation, route }) {
   };
 
   const handleVerifyOtp = async () => {
-    const code = otp.join('');
+    const code = otp.join('').trim();
     if (code.length < 4) {
       Alert.alert('अधूरा OTP', 'कृपया 4-अंकों का Start OTP दर्ज करें।');
       return;
     }
 
     setLoading(true);
+    let verified = false;
+    let serverRejectedMsg = null;
 
-    // 1. Verify in reactive store
-    const storeRes = panditBookingStore.verifyStartOtp(code);
-    if (!storeRes.success) {
-      Alert.alert('अमान्य OTP', storeRes.message || 'OTP मेल नहीं खा रहा है। कृपया यजमान से पुनः पुष्टि करें।');
+    // 1. Verify against live backend first (authoritative OTP generated for User App)
+    try {
+      const apiRes = await JobService.verifyStartOtp(bId, code);
+      if (apiRes?.success) {
+        verified = true;
+        panditBookingStore.forceStart();
+      } else if (apiRes?.message) {
+        serverRejectedMsg = apiRes.message;
+      }
+    } catch (err) {
+      if (err?.status === 400 || err?.status === 429) {
+        serverRejectedMsg = err?.message || 'अमान्य Start OTP। कृपया यजमान की ऐप से कोड जांचें।';
+      }
+    }
+
+    // 2. Fallback to socket / local booking OTP when offline or socket-only booking
+    if (!verified) {
+      const localExpected = booking?.startOtp || panditBookingStore.getBooking()?.startOtp;
+      if (localExpected && String(localExpected).trim() === code) {
+        panditBookingStore.setStartOtp(localExpected);
+        panditBookingStore.forceStart();
+        verified = true;
+      } else if (!serverRejectedMsg) {
+        const storeRes = panditBookingStore.verifyStartOtp(code);
+        if (storeRes.success) {
+          verified = true;
+        } else {
+          serverRejectedMsg = storeRes.message;
+        }
+      }
+    }
+
+    if (!verified) {
       setLoading(false);
+      Alert.alert(
+        'अमान्य OTP',
+        serverRejectedMsg || 'OTP मेल नहीं खा रहा है। कृपया यजमान से सही 4-अंकों का Start OTP पूछें।'
+      );
       return;
     }
 
-    // 2. Broadcast across WebSocket so Devotee screen updates to "Pooja In Progress"
+    // 3. Broadcast across WebSocket so Devotee screen updates to "Pooja In Progress"
     socket.emit('booking:pooja_started', { bookingId: bId });
-
-    // 3. REST API update
-    try {
-      await api.put(`instant/${bId}/start`, { startOtp: code, otp: code });
-    } catch (_) { }
+    socket.emit('instant:update', { id: bId, bookingId: bId, status: 'IN_PROGRESS' });
 
     setLoading(false);
 
     // 4. Navigate directly to active Pooja In Progress screen
-    navigation.replace('PoojaInProgress', { job: panditBookingStore.getBooking() });
+    navigation.replace('PoojaInProgress', { job: panditBookingStore.getBooking() || booking });
   };
 
   const toggleCheck = (k) => {
@@ -97,7 +130,8 @@ export default function StartOtpScreen({ navigation, route }) {
       <StatusBar barStyle="dark-content" backgroundColor="#FBF8F2" />
       <Header title="पूजा प्रारंभ OTP सत्यापन" subtitle="चरण 2: यजमान सत्यापन" navigation={navigation} />
 
-      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* ARRIVAL BADGE */}
         <View style={s.arrivedBanner}>
           <LinearGradient colors={['#1E8E4A', '#137338']} style={s.arrivedGrad}>
@@ -198,6 +232,7 @@ export default function StartOtpScreen({ navigation, route }) {
 
         <View style={{ height: 120 + insets.bottom }} />
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* BOTTOM SUBMIT BUTTON */}
       <View style={[s.bottomBar, { paddingBottom: Math.max(16, insets.bottom + 10) }]}>

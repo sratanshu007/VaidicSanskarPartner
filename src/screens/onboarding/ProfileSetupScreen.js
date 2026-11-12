@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
@@ -38,6 +39,8 @@ export default function ProfileSetupScreen({ navigation }) {
   const [aadhaarFrontUri, setAadhaarFrontUri] = useState(vendor?.aadhaarFront || vendor?.idCardFront || null);
   const [aadhaarBackUri, setAadhaarBackUri] = useState(vendor?.aadhaarBack || vendor?.idCardBack || null);
   const [panFrontUri, setPanFrontUri] = useState(vendor?.panFront || vendor?.panCardPhoto || null);
+  const [uploadingCount, setUploadingCount] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
 
   // Format Aadhaar: 12 digits into "XXXX XXXX XXXX"
   function formatAadhaar(val) {
@@ -58,22 +61,45 @@ export default function ProfileSetupScreen({ navigation }) {
     setPanNumber(clean);
   };
 
-  // Auto-upload chosen image to backend so Admin dashboard gets reachable image URL
+  const isRemoteUrl = (u) => typeof u === 'string' && /^https?:\/\//i.test(u.trim());
+
+  const uploadImageToCloudinary = async (uri) => {
+    if (!uri) return null;
+    if (isRemoteUrl(uri)) return uri.trim();
+
+    const cleanName = (uri.split('?')[0].split('/').pop() || `kyc_${Date.now()}.jpg`);
+    const extMatch = /\.(\w+)$/.exec(cleanName);
+    const rawExt = extMatch ? extMatch[1].toLowerCase() : 'jpg';
+    const mimeExt = rawExt === 'jpg' ? 'jpeg' : rawExt;
+    const type = ['jpeg', 'png', 'webp', 'gif'].includes(mimeExt) ? `image/${mimeExt}` : 'image/jpeg';
+
+    const formData = new FormData();
+    formData.append('photo', { uri, name: cleanName, type });
+    formData.append('folder', 'vaidic_sanskar_kyc');
+
+    const res = await VendorService.uploadPhoto(formData);
+    const cloudUrl = res?.secure_url || res?.url;
+    if (!res?.success || !isRemoteUrl(cloudUrl)) {
+      throw new Error(res?.message || 'Cloudinary did not return an image URL.');
+    }
+    return cloudUrl;
+  };
+
+  // Auto-upload chosen image to Cloudinary immediately so Admin gets reachable HTTPS URLs
   const uploadAndSet = async (uri, setter) => {
     setter(uri);
+    setUploadingCount((c) => c + 1);
     try {
-      const filename = uri.split('/').pop() || 'kyc_doc.jpg';
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : 'image/jpeg';
-      const formData = new FormData();
-      formData.append('photo', { uri, name: filename, type });
-      formData.append('folder', 'vaidic_sanskar_kyc');
-      const res = await VendorService.uploadPhoto(formData);
-      if (res?.success && (res.url || res.secure_url)) {
-        setter(res.url || res.secure_url);
-      }
+      const cloudUrl = await uploadImageToCloudinary(uri);
+      setter(cloudUrl);
     } catch (err) {
       console.warn('KYC auto-upload error:', err?.message || err);
+      Alert.alert(
+        'Upload Pending / Retrying on Continue',
+        'Image selected locally, but upload to cloud did not complete yet. It will retry automatically when you tap Continue.'
+      );
+    } finally {
+      setUploadingCount((c) => Math.max(0, c - 1));
     }
   };
 
@@ -133,7 +159,7 @@ export default function ProfileSetupScreen({ navigation }) {
     );
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     const trimmedName = fullName.trim();
     if (!trimmedName) {
       Alert.alert('Required Field', 'Please enter your full name / अपना पूरा नाम दर्ज करें');
@@ -170,31 +196,62 @@ export default function ProfileSetupScreen({ navigation }) {
       }
     }
 
-    // Bundle all details into Partner Context
-    updateVendor({
-      name: trimmedName,
-      phone: phone.trim(),
-      email: email.trim(),
-      city: city.trim(),
-      experienceYears: experienceYears.trim() ? Number(experienceYears.trim()) || experienceYears.trim() : 5,
-      gurukul: gurukul.trim(),
-      degree: gurukul.trim(),
-      photo: photoUri,
-      // KYC Information
-      preferredIdType: preferredId,
-      aadhaarNumber: cleanAadhaar,
-      panNumber: cleanPan,
-      idCardFront: preferredId === 'pan' ? panFrontUri : aadhaarFrontUri,
-      idCardBack: preferredId === 'pan' ? null : aadhaarBackUri,
-      aadhaarFront: aadhaarFrontUri,
-      aadhaarBack: aadhaarBackUri,
-      panFront: panFrontUri,
-      kycDocs: true,
-      kyc: 'Pending',
-      status: 'Review',
-    });
+    setSubmitting(true);
+    try {
+      const resolveUrl = async (uri, setter, label) => {
+        if (!uri) return null;
+        if (isRemoteUrl(uri)) return uri.trim();
+        const uploaded = await uploadImageToCloudinary(uri);
+        setter(uploaded);
+        return uploaded;
+      };
 
-    navigation.navigate('SelectServices');
+      const finalPhoto = await resolveUrl(photoUri, setPhotoUri, 'Profile Photo');
+      const finalAadhaarFront = await resolveUrl(aadhaarFrontUri, setAadhaarFrontUri, 'Aadhaar Front');
+      const finalAadhaarBack = await resolveUrl(aadhaarBackUri, setAadhaarBackUri, 'Aadhaar Back');
+      const finalPanFront = await resolveUrl(panFrontUri, setPanFrontUri, 'PAN Card');
+
+      const profilePatch = {
+        id: vendor?.id,
+        name: trimmedName,
+        phone: phone.trim(),
+        email: email.trim().toLowerCase(),
+        city: city.trim(),
+        experienceYears: experienceYears.trim() ? Number(experienceYears.trim()) || experienceYears.trim() : 5,
+        gurukul: gurukul.trim(),
+        degree: gurukul.trim(),
+        photo: finalPhoto,
+        profileImage: finalPhoto,
+        // KYC Information
+        preferredIdType: preferredId,
+        aadhaarNumber: cleanAadhaar,
+        panNumber: cleanPan,
+        idCardFront: preferredId === 'pan' ? finalPanFront : finalAadhaarFront,
+        idCardBack: preferredId === 'pan' ? null : finalAadhaarBack,
+        aadhaarFront: finalAadhaarFront,
+        aadhaarBack: finalAadhaarBack,
+        panFront: finalPanFront,
+        kycDocs: true,
+        kyc: 'Pending',
+        status: 'Review',
+      };
+
+      updateVendor(profilePatch);
+      try {
+        await VendorService.updateProfile(profilePatch);
+      } catch (syncErr) {
+        console.warn('Step 1 profile sync notice:', syncErr?.message || syncErr);
+      }
+
+      navigation.navigate('SelectServices');
+    } catch (err) {
+      Alert.alert(
+        'Cloudinary Upload Required',
+        err?.message || 'Selected document images could not be uploaded to cloud yet. Please check your internet and tap Continue again.'
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -573,10 +630,20 @@ export default function ProfileSetupScreen({ navigation }) {
         <View style={s.bottomBar}>
           <TouchableOpacity
             activeOpacity={0.88}
+            disabled={submitting}
             onPress={handleNext}
-            style={s.nextBtn}
+            style={[s.nextBtn, submitting && { opacity: 0.75 }]}
           >
-            <Text style={s.nextBtnText}>Continue to Services ›</Text>
+            {submitting || uploadingCount > 0 ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <ActivityIndicator color="#FFFFFF" size="small" />
+                <Text style={s.nextBtnText}>
+                  {submitting ? 'Uploading KYC & Saving...' : 'Syncing Photos to Cloud...'}
+                </Text>
+              </View>
+            ) : (
+              <Text style={s.nextBtnText}>Continue to Services ›</Text>
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

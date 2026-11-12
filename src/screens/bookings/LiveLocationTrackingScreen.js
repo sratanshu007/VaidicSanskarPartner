@@ -18,6 +18,7 @@ import * as Location from 'expo-location';
 import { usePartner } from '../../context/PartnerContext';
 import panditBookingStore from '../../services/panditBookingStore';
 import socket from '../../services/socket';
+import api, { JobService } from '../../services/api';
 import { getPanditLiveLocation } from '../../services/partnerLocationService';
 import colors from '../../theme/colors';
 
@@ -76,6 +77,8 @@ export default function LiveLocationTrackingScreen({ navigation, route }) {
 
   // Status lifecycle
   const [status, setStatus] = useState(booking?.status || 'ACCEPTED');
+  const statusRef = useRef(status);
+  statusRef.current = status;
   const [distanceKm, setDistanceKm] = useState(2.4);
   const [etaMin, setEtaMin] = useState(8);
 
@@ -105,10 +108,12 @@ export default function LiveLocationTrackingScreen({ navigation, route }) {
   // Subscribe to live GPS coordinates and watch position
   useEffect(() => {
     let watcher = null;
+    let cancelled = false;
 
     (async () => {
       try {
         const live = await getPanditLiveLocation();
+        if (cancelled) return;
         if (live?.success && live.coords) {
           const coords = {
             latitude: live.coords.latitude,
@@ -129,8 +134,8 @@ export default function LiveLocationTrackingScreen({ navigation, route }) {
 
         // Watch device movement
         const { status: permStatus } = await Location.getForegroundPermissionsAsync();
-        if (permStatus === 'granted') {
-          watcher = await Location.watchPositionAsync(
+        if (permStatus === 'granted' && !cancelled) {
+          const sub = await Location.watchPositionAsync(
             {
               accuracy: Location.Accuracy.Balanced,
               timeInterval: 4000,
@@ -159,17 +164,19 @@ export default function LiveLocationTrackingScreen({ navigation, route }) {
                   longitude: updated.longitude,
                   distanceKm: d,
                   etaMinutes: Math.max(2, Math.round(d * 3.5)),
-                  status,
+                  status: statusRef.current,
                 });
                 socket.emit('tracking:update', {
                   bookingId: booking.id,
                   latitude: updated.latitude,
                   longitude: updated.longitude,
-                  status,
+                  status: statusRef.current,
                 });
               }
             }
           );
+          if (cancelled) sub?.remove?.();
+          else watcher = sub;
         }
       } catch (err) {
         console.log('Live tracking watcher note:', err?.message);
@@ -182,10 +189,11 @@ export default function LiveLocationTrackingScreen({ navigation, route }) {
     });
 
     return () => {
+      cancelled = true;
       if (typeof unsub === 'function') unsub();
       if (typeof watcher?.remove === 'function') watcher.remove();
     };
-  }, [booking?.id, status]);
+  }, [booking?.id]);
 
   // Recenter map
   const handleRecenter = () => {
@@ -265,12 +273,16 @@ export default function LiveLocationTrackingScreen({ navigation, route }) {
     panditBookingStore.setArrived(100);
     setStatus('ARRIVED');
 
-    socket.emit('booking:arrived', { bookingId: booking.id });
-    socket.emit('instant:update', {
-      id: booking.id,
-      requestId: booking.id,
-      status: 'ARRIVED',
-    });
+    if (booking?.id) {
+      socket.emit('booking:arrived', { bookingId: booking.id });
+      socket.emit('instant:update', {
+        id: booking.id,
+        requestId: booking.id,
+        status: 'ARRIVED',
+      });
+      JobService.arrive(booking.id).catch(() => {});
+      api.put(`instant/${booking.id}/arrived`).catch(() => {});
+    }
 
     Alert.alert(
       'पहुँच गए!',

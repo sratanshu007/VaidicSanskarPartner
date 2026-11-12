@@ -20,8 +20,8 @@ import MandaliManagementScreen from '../screens/mandali/MandaliManagementScreen'
 import BookingsListScreen from '../screens/bookings/BookingsListScreen';
 import BookingDetailsScreen from '../screens/bookings/BookingDetailsScreen';
 import LiveLocationTrackingScreen from '../screens/bookings/LiveLocationTrackingScreen';
-import AstrologyServicesScreen from '../screens/astro/AstrologyServicesScreen';
 import PoojaServicesScreen from '../screens/pandit/PoojaServicesScreen';
+import SlotManagerScreen from '../screens/pandit/SlotManagerScreen';
 import WalletEarningsScreen from '../screens/earnings/WalletEarningsScreen';
 import ProfileSettingsScreen from '../screens/profile/ProfileSettingsScreen';
 import NotificationsScreen from '../screens/notifications/NotificationsScreen';
@@ -37,10 +37,13 @@ import PoojaInProgressScreen from '../screens/pandit/PoojaInProgressScreen';
 import CompletionOtpScreen from '../screens/pandit/CompletionOtpScreen';
 import PoojaCompletedScreen from '../screens/pandit/PoojaCompletedScreen';
 import DailyRouteScreen from '../screens/pandit/DailyRouteScreen';
+import DailyVisitScreen from '../screens/pandit/DailyVisitScreen';
 import InCallScreen from '../screens/astro/InCallScreen';
 import AstroSessionScreen from '../screens/astro/AstroSessionScreen';
 import KundaliToolsScreen from '../screens/astro/KundaliToolsScreen';
+import AstroDashboard from '../screens/astro/AstroDashboard';
 import ChatScreen from '../screens/common/ChatScreen';
+import ReviewScreen from '../screens/common/ReviewScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -73,8 +76,9 @@ export default function RootNavigator() {
         <Stack.Screen name="BookingsList" component={BookingsListScreen} />
         <Stack.Screen name="BookingDetails" component={BookingDetailsScreen} />
         <Stack.Screen name="LiveLocationTracking" component={LiveLocationTrackingScreen} />
-        <Stack.Screen name="AstrologyServices" component={AstrologyServicesScreen} />
+        <Stack.Screen name="AstrologyServices" component={AstroDashboard} />
         <Stack.Screen name="PoojaServices" component={PoojaServicesScreen} />
+        <Stack.Screen name="Calendar" component={SlotManagerScreen} />
         <Stack.Screen name="WalletEarnings" component={WalletEarningsScreen} />
         <Stack.Screen name="ProfileSettings" component={ProfileSettingsScreen} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
@@ -90,10 +94,13 @@ export default function RootNavigator() {
         <Stack.Screen name="CompletionOtp" component={CompletionOtpScreen} />
         <Stack.Screen name="PoojaCompleted" component={PoojaCompletedScreen} />
         <Stack.Screen name="DailyRoute" component={DailyRouteScreen} />
+        <Stack.Screen name="DailyVisit" component={DailyVisitScreen} />
         <Stack.Screen name="InCall" component={InCallScreen} />
+        <Stack.Screen name="AstroDashboard" component={AstroDashboard} />
         <Stack.Screen name="AstroSession" component={AstroSessionScreen} />
         <Stack.Screen name="KundaliTools" component={KundaliToolsScreen} />
         <Stack.Screen name="Chat" component={ChatScreen} />
+        <Stack.Screen name="Review" component={ReviewScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

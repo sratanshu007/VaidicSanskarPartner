@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,32 +8,46 @@ import {
   StatusBar,
   Image,
   Modal,
+  Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { usePartner } from '../../context/PartnerContext';
 import IncomingRequestModal from '../../components/IncomingRequestModal';
+import PanditAstroToggleCard from '../../components/PanditAstroToggleCard';
+import * as VendorAstroHelper from '../../services/astroPresenceHelper';
 import socket from '../../services/socket';
 import panditBookingStore from '../../services/panditBookingStore';
 import { JobService, getAuthToken } from '../../services/api';
 import api from '../../services/api';
-import colors from '../../theme/colors';
 import { serif } from '../../theme/styles';
 import partnerAstroStore from '../../services/talkToAstroStore';
 
-const TEMPLE_IMAGE = require('../../../assets/sacred_temple_emblem.png');
+const AVATAR_FALLBACK = require('../../../assets/profile_krishna_avatar.png');
+const PUJA_THUMB = require('../../../assets/banner_havan_kund.png');
 
 export default function VendorHomeScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const partnerData = usePartner() || {};
   const {
     vendor = null,
     bookings = [],
     setBookings,
+    refreshBookings,
+    refreshEarnings,
     walletBalance = 0,
     expectedEarnings = 0,
     notifications = [],
   } = partnerData;
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshBookings?.();
+      refreshEarnings?.();
+    }, [refreshBookings, refreshEarnings])
+  );
 
   const [incomingJob, setIncomingJob] = useState(null);
   const [incomingCall, setIncomingCall] = useState(null);
@@ -76,24 +90,15 @@ export default function VendorHomeScreen({ navigation }) {
   useEffect(() => {
     const token = vendor?.token || getAuthToken?.();
     socket?.connect?.(token);
-    socket?.emit?.('pandit:join', { vendorId: vendor?.id || 'PND-VERIFIED' });
-    socket?.emit?.('astro:online', {
-      id: vendor?.id || vendor?._id || 'V4569',
-      vendorId: vendor?.id || vendor?._id || 'V4569',
-      name: vendor?.name || 'पंडित जी (Live Partner)',
-      nameHi: vendor?.name || 'पंडित जी (Live Partner)',
-      title: 'सत्यापित वैदिक ज्योतिषी • पार्टनर ऐप',
-      isOnline: true,
-      rates: { chat: 5, audio: 5, video: 5 },
-      rating: 5.0,
-      skills: ['Vedic', 'KP Astrology', 'Kundli'],
-    });
+    const partnerId = VendorAstroHelper.resolvePartnerId(vendor, 'PND-VERIFIED');
+    socket?.emit?.('pandit:join', { vendorId: partnerId });
+    socket?.emit?.('vendor:join', { vendorId: partnerId });
+    if (vendor?.isAstroEnabled) {
+      VendorAstroHelper.broadcastAstroOnline(vendor);
+    }
 
-    // Listen for incoming booking / instant request broadcasts
     const onNewJob = (jobData) => {
-      if (jobData) {
-        setIncomingJob(jobData);
-      }
+      if (jobData) setIncomingJob(jobData);
     };
 
     const unsubReq = socket?.on?.('booking:request', onNewJob);
@@ -108,9 +113,7 @@ export default function VendorHomeScreen({ navigation }) {
     });
 
     const unsubCall = socket?.on?.('astro:call:incoming', (callData) => {
-      if (callData) {
-        setIncomingCall(callData);
-      }
+      if (callData) setIncomingCall(callData);
     });
 
     const unsubCallEnd = socket?.on?.('astro:call:ended', () => {
@@ -129,7 +132,6 @@ export default function VendorHomeScreen({ navigation }) {
     const call = incomingCall;
     setIncomingCall(null);
 
-    // Accept via Socket signaling
     socket.emit('astro:call:accept', {
       channelName: call.channelName,
       callerId: call.caller?.id || 'U101',
@@ -173,8 +175,18 @@ export default function VendorHomeScreen({ navigation }) {
       navigation.navigate('AstroSession');
     } else {
       navigation.navigate('InCall', {
-        caller: call.caller || { name: 'Customer / Devotee', mode: call.mode || 'video', rate: call.rate || 5, id: call.caller?.id },
+        caller: {
+          ...(call.caller || {}),
+          name: call.userName || call.caller?.name || 'Customer / Devotee',
+          mode: call.mode || 'video',
+          rate: call.rate || 5,
+          id: call.caller?.id || call.userId || 'U101',
+          agoraToken: call.agoraToken,
+        },
         channelName: call.channelName,
+        agoraToken: call.agoraToken,
+        vendorId: vendor?.id || 'V4569',
+        alreadyAccepted: true,
       });
     }
   };
@@ -195,14 +207,13 @@ export default function VendorHomeScreen({ navigation }) {
     setIncomingJob(null);
 
     const bId = currentJob.id || currentJob.bookingId || currentJob.requestId || 'BK' + Date.now();
-
-    const partnerData = {
+    const pData = {
       id: vendor?.id || vendor?._id || 'PND-VERIFIED',
       name: vendor?.name || 'पंडित जी',
       phone: vendor?.phone || '',
       photo: vendor?.photo || null,
-      rating: vendor?.rating || 5.0,
-      reviewsCount: vendor?.reviewsCount || vendor?.completedPoojaCount || 1,
+      rating: Number(vendor?.rating || 0),
+      reviewsCount: Number(vendor?.reviewsCount || vendor?.completedPoojaCount || 0),
       gurukul: vendor?.gurukul || vendor?.bio || 'वैदिक आचार्य',
     };
 
@@ -210,33 +221,29 @@ export default function VendorHomeScreen({ navigation }) {
       ...currentJob,
       id: bId,
       status: 'ACCEPTED',
-      pandit: partnerData,
+      pandit: pData,
       acceptedAt: new Date().toISOString(),
     };
 
-    // 1. Store locally in Pandit reactive state store
     panditBookingStore.setBooking(acceptedBooking);
-
-    // 2. Add to Partner bookings list
     if (setBookings) {
       setBookings((prev) => [acceptedBooking, ...prev.filter((b) => (b.id || b._id) !== bId)]);
     }
 
-    // 3. Emit real-time acceptance across backend WebSocket so devotee's screen transitions instantly
-    socket.emit('job:accept', { job_id: bId, bookingId: bId, vendorId: partnerData.id, pandit: partnerData });
+    socket.emit('job:accept', { job_id: bId, bookingId: bId, vendorId: pData.id, pandit: pData });
     socket.emit('booking:accepted', {
       id: bId,
       bookingId: bId,
       status: 'ACCEPTED',
-      assignedVendor: partnerData,
-      vendor: partnerData,
+      assignedVendor: pData,
+      vendor: pData,
     });
     socket.emit('instant:update', {
       id: bId,
       requestId: bId,
       status: 'ACCEPTED',
-      assignedVendor: partnerData,
-      vendor: partnerData,
+      assignedVendor: pData,
+      vendor: pData,
     });
 
     try {
@@ -246,7 +253,6 @@ export default function VendorHomeScreen({ navigation }) {
     }
     api.put(`instant/${bId}/accept`).catch(() => {});
 
-    // 4. Navigate directly to En Route travel navigation screen
     navigation.navigate('EnRoute', { job: acceptedBooking });
   };
 
@@ -263,212 +269,295 @@ export default function VendorHomeScreen({ navigation }) {
   };
 
   const unreadCount = (notifications || []).length;
+  const totalBookingsCount = (bookings || []).length;
+  const displayEarnings = Number(walletBalance || expectedEarnings || 0).toLocaleString('en-IN');
+  const recentBookings = (bookings || []).slice(0, 3);
+
+  const getStatusStyle = (statusRaw) => {
+    const st = String(statusRaw || 'Confirmed').toUpperCase();
+    if (st === 'COMPLETED' || st === 'DONE') return { bg: '#EBF8F0', text: '#1E8E4A', label: 'Completed' };
+    if (st === 'IN_PROGRESS' || st === 'POOJA_STARTED' || st === 'STARTED') {
+      return { bg: '#FFF4E0', text: '#C57B13', label: 'In Progress' };
+    }
+    if (st === 'ARRIVED') return { bg: '#EBF8F0', text: '#1E8E4A', label: 'Arrived' };
+    if (st === 'ON_THE_WAY' || st === 'EN_ROUTE') return { bg: '#EBF8F0', text: '#1E8E4A', label: 'On The Way' };
+    if (st === 'ACCEPTED' || st === 'CONFIRMED') {
+      return { bg: '#EBF8F0', text: '#1E8E4A', label: 'Confirmed' };
+    }
+    if (st === 'CANCELLED' || st === 'DECLINED' || st.startsWith('CANCELLED_')) {
+      return { bg: '#FDECEC', text: '#D13939', label: 'Cancelled' };
+    }
+    if (st === 'PENDING_ACCEPTANCE' || st === 'PENDING' || st === 'REQUESTED') {
+      return { bg: '#FFF4E0', text: '#C57B13', label: 'New' };
+    }
+    return { bg: '#FFF4E0', text: '#C57B13', label: statusRaw || 'Pending' };
+  };
 
   return (
-    <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FBF8F2" />
+    <SafeAreaView style={s.safe} edges={['left', 'right']}>
+      <StatusBar barStyle="light-content" backgroundColor="#67101F" />
       <ScrollView
         style={s.container}
         contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Top App Bar */}
-        <View style={s.topBar}>
-          <View>
-            <Text style={s.brandTitle}>VaidicSanskar</Text>
-            <Text style={s.partnerSubtitle}>Vendor Partner</Text>
-          </View>
-
-          <View style={s.topRightActions}>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('Notifications')}
-              style={s.bellBtn}
-            >
-              <MaterialCommunityIcons name="bell-outline" size={24} color="#2E1418" />
-              {unreadCount > 0 && <View style={s.redBadge} />}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('ProfileSettings')}
-              style={s.avatarWrap}
-            >
-              {vendor?.photo ? (
-                <Image source={{ uri: vendor.photo }} style={s.avatarImg} />
-              ) : (
-                <View style={s.avatarPlaceholder}>
-                  <MaterialCommunityIcons name="account" size={22} color="#67101F" />
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* ACTIVE PUJA RESUME BANNER */}
-        {activeBooking &&
-          activeBooking.status !== 'COMPLETED' &&
-          activeBooking.status !== 'CANCELLED' && (
-            <TouchableOpacity
-              activeOpacity={0.88}
-              style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: 18,
-                padding: 16,
-                marginBottom: 18,
-                borderWidth: 1.5,
-                borderColor: '#D48B28',
-                shadowColor: '#67101F',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.12,
-                shadowRadius: 8,
-                elevation: 4,
-              }}
-              onPress={() => {
-                const currentStatus = String(activeBooking.status || '').toUpperCase();
-                if (currentStatus === 'ARRIVED') {
-                  navigation.navigate('StartOtp', { job: activeBooking });
-                } else if (currentStatus === 'POOJA_STARTED' || currentStatus === 'IN_PROGRESS') {
-                  navigation.navigate('PoojaInProgress', { job: activeBooking });
-                } else if (currentStatus === 'COMPLETION_REQUESTED') {
-                  navigation.navigate('CompletionOtp', { job: activeBooking });
-                } else {
-                  navigation.navigate('EnRoute', { job: activeBooking });
-                }
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#1E8E4A', marginRight: 8 }} />
-                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#1E8E4A', letterSpacing: 0.5 }}>
-                    सक्रिय पूजा कार्य जारी है • {activeBooking.status}
-                  </Text>
-                </View>
-                <Ionicons name="arrow-forward-circle" size={20} color="#D48B28" />
-              </View>
-              <Text style={{ fontSize: 16, fontWeight: '800', color: '#2E1418', fontFamily: serif, marginTop: 6 }}>
-                {activeBooking.pooja?.name || activeBooking.name || 'वैदिक पूजा'}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#7D686B', marginTop: 2 }}>
-                यजमान: {activeBooking.yajmanName || 'यजमान'} • [टैप कर चरण जारी रखें ›]
-              </Text>
-            </TouchableOpacity>
-          )}
-
-        {/* Today's Overview Card */}
+        {/* Curved Maroon Header matching Screen 3 */}
         <LinearGradient
-          colors={['#67101F', '#490B15']}
+          colors={['#6E1020', '#4A0813']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={s.overviewCard}
+          style={[s.curvedHeader, { paddingTop: Math.max(insets.top, 20) + 14 }]}
         >
-          <Text style={s.overviewHeading}>Today's Overview</Text>
+          <View style={s.headerTopRow}>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <Text style={s.greetingSmall}>Good Morning,</Text>
+              <Text style={s.partnerName} numberOfLines={1}>
+                {vendor?.name || 'VaidicSanskar Partner'}
+              </Text>
+              <View style={s.onlineBadge}>
+                <View style={s.onlineDot} />
+                <Text style={s.onlineText}>Online</Text>
+              </View>
+            </View>
 
-          <View style={s.overviewRow}>
-            {/* Left metric */}
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => navigation.navigate('BookingsList')}
-              style={s.metricCol}
-            >
-              <Text style={s.metricValue}>{(bookings || []).length}</Text>
-              <Text style={s.metricLabel}>Upcoming Bookings</Text>
-            </TouchableOpacity>
+            <View style={s.headerRight}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => navigation.navigate('Notifications')}
+                style={s.bellBtn}
+              >
+                <MaterialCommunityIcons name="bell-outline" size={22} color="#FFF6E3" />
+                {unreadCount > 0 && <View style={s.redBadge} />}
+              </TouchableOpacity>
 
-            {/* Vertical separator */}
-            <View style={s.metricDivider} />
-
-            {/* Right metric */}
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => navigation.navigate('WalletEarnings')}
-              style={s.metricCol}
-            >
-              <Text style={s.metricValue}>₹ {Number(expectedEarnings || 0).toLocaleString('en-IN')}</Text>
-              <Text style={s.metricLabel}>Expected Earnings</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => navigation.navigate('ProfileSettings')}
+                style={s.avatarRing}
+              >
+                <Image
+                  source={vendor?.photo ? { uri: vendor.photo } : AVATAR_FALLBACK}
+                  style={s.avatarImg}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
         </LinearGradient>
 
-        {/* Quick Actions Header */}
-        <Text style={s.sectionTitle}>Quick Actions</Text>
-
-        {/* 2x2 Grid of Actions */}
-        <View style={s.grid}>
-          {/* 1. My Bookings */}
+        {/* Overlapping Summary Metric Cards matching Screen 3 */}
+        <View style={s.metricsWrap}>
           <TouchableOpacity
-            activeOpacity={0.85}
+            activeOpacity={0.88}
             onPress={() => navigation.navigate('BookingsList')}
-            style={s.actionCard}
+            style={s.metricCard}
           >
-            <View style={s.actionIconCircle}>
-              <MaterialCommunityIcons name="calendar-month-outline" size={24} color="#D48B28" />
+            <View style={s.metricIconBox}>
+              <MaterialCommunityIcons name="calendar-check" size={20} color="#67101F" />
             </View>
-            <Text style={s.actionTitle}>My Bookings</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.metricLabel}>Total Bookings</Text>
+              <Text style={s.metricValue}>{totalBookingsCount}</Text>
+            </View>
           </TouchableOpacity>
 
-          {/* 2. Mandali (Pooja Group) */}
           <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('MandaliManagement')}
-            style={s.actionCard}
+            activeOpacity={0.88}
+            onPress={() => navigation.navigate('WalletEarnings')}
+            style={s.metricCard}
           >
-            <View style={s.actionIconCircle}>
-              <MaterialCommunityIcons name="account-group-outline" size={24} color="#D48B28" />
+            <View style={[s.metricIconBox, { backgroundColor: '#FDF3DC' }]}>
+              <MaterialCommunityIcons name="cash-multiple" size={20} color="#D48B28" />
             </View>
-            <Text style={s.actionTitle}>Mandali{'\n'}(Pooja Group)</Text>
-          </TouchableOpacity>
-
-          {/* 3. Astrology Consultations */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('AstrologyServices')}
-            style={s.actionCard}
-          >
-            <View style={s.actionIconCircle}>
-              <MaterialCommunityIcons name="creation" size={24} color="#D48B28" />
+            <View style={{ flex: 1 }}>
+              <Text style={s.metricLabel}>Earnings</Text>
+              <Text style={s.metricValue}>₹ {displayEarnings}</Text>
             </View>
-            <Text style={s.actionTitle}>Astrology{'\n'}Consultations</Text>
-          </TouchableOpacity>
-
-          {/* 4. Profile & Services */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => navigation.navigate('ProfileSettings')}
-            style={s.actionCard}
-          >
-            <View style={s.actionIconCircle}>
-              <MaterialCommunityIcons name="account-cog-outline" size={24} color="#D48B28" />
-            </View>
-            <Text style={s.actionTitle}>Profile & Services</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Spiritual Devotion Banner */}
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={() => navigation.navigate('PoojaServices')}
-          style={s.devotionBanner}
-        >
-          <LinearGradient
-            colors={['#5A0D1A', '#3C060F']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={s.devotionBannerGrad}
-          >
-            <View style={s.devotionTextWrap}>
-              <Text style={s.devotionTitle}>Your Devotion</Text>
-              <Text style={s.devotionSub}>Supports Devotees</Text>
-            </View>
-            <Image
-              source={TEMPLE_IMAGE}
-              style={s.devotionTempleImg}
-              resizeMode="contain"
-            />
-          </LinearGradient>
-        </TouchableOpacity>
+        <View style={s.bodyPad}>
+          {/* ACTIVE PUJA RESUME BANNER */}
+          {activeBooking &&
+            activeBooking.status !== 'COMPLETED' &&
+            activeBooking.status !== 'CANCELLED' && (
+              <TouchableOpacity
+                activeOpacity={0.88}
+                style={s.activeResumeCard}
+                onPress={() => {
+                  const currentStatus = String(activeBooking.status || '').toUpperCase();
+                  if (currentStatus === 'ARRIVED') {
+                    navigation.navigate('StartOtp', { job: activeBooking });
+                  } else if (currentStatus === 'POOJA_STARTED' || currentStatus === 'IN_PROGRESS') {
+                    navigation.navigate('PoojaInProgress', { job: activeBooking });
+                  } else if (currentStatus === 'COMPLETION_REQUESTED') {
+                    navigation.navigate('CompletionOtp', { job: activeBooking });
+                  } else {
+                    navigation.navigate('EnRoute', { job: activeBooking });
+                  }
+                }}
+              >
+                <View style={s.activeTopRow}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={s.activeDot} />
+                    <Text style={s.activeStatusText}>
+                      सक्रिय पूजा जारी • {activeBooking.status}
+                    </Text>
+                  </View>
+                  <Ionicons name="arrow-forward-circle" size={20} color="#D48B28" />
+                </View>
+                <Text style={s.activeTitle}>
+                  {activeBooking.pooja?.name || activeBooking.name || 'वैदिक पूजा'}
+                </Text>
+                <Text style={s.activeSub}>
+                  यजमान: {activeBooking.yajmanName || 'यजमान'} • [चरण जारी रखें ›]
+                </Text>
+              </TouchableOpacity>
+            )}
 
-        <View style={{ height: 32 }} />
+          {/* Quick Actions 4-Circle Row matching Screen 3 */}
+          <Text style={s.sectionTitle}>Quick Actions</Text>
+          <View style={s.quickCircleRow}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('SelectServices', { manageMode: true })}
+              style={s.quickCircleItem}
+            >
+              <View style={s.quickCircle}>
+                <MaterialCommunityIcons name="hands-pray" size={24} color="#67101F" />
+              </View>
+              <Text style={s.quickCircleLabel}>My Services</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('Calendar')}
+              style={s.quickCircleItem}
+            >
+              <View style={s.quickCircle}>
+                <MaterialCommunityIcons name="calendar-month-outline" size={24} color="#67101F" />
+              </View>
+              <Text style={s.quickCircleLabel}>Calendar</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('WalletEarnings')}
+              style={s.quickCircleItem}
+            >
+              <View style={s.quickCircle}>
+                <MaterialCommunityIcons name="wallet-outline" size={24} color="#67101F" />
+              </View>
+              <Text style={s.quickCircleLabel}>Earnings</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('HelpSupport')}
+              style={s.quickCircleItem}
+            >
+              <View style={s.quickCircle}>
+                <MaterialCommunityIcons name="headphones" size={24} color="#67101F" />
+              </View>
+              <Text style={s.quickCircleLabel}>Support</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Compact Service Shortcuts for Pandit, Mandali & Astrology */}
+          <View style={s.shortcutRow}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('PoojaServices')}
+              style={s.shortcutChip}
+            >
+              <MaterialCommunityIcons name="fire" size={16} color="#D48B28" />
+              <Text style={s.shortcutChipText}>Pandit Services</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('MandaliManagement')}
+              style={s.shortcutChip}
+            >
+              <MaterialCommunityIcons name="account-group-outline" size={16} color="#D48B28" />
+              <Text style={s.shortcutChipText}>Mandali</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => {
+                if (typeof partnerData.updateVendor === 'function') {
+                  partnerData.updateVendor({ isAstroEnabled: true });
+                }
+                VendorAstroHelper.broadcastAstroOnline(
+                  { ...vendor, isAstroEnabled: true },
+                  partnerAstroStore.getPresence(),
+                  partnerAstroStore.getRates()
+                );
+              }}
+              style={s.shortcutChip}
+            >
+              <MaterialCommunityIcons name="creation" size={16} color="#D48B28" />
+              <Text style={s.shortcutChipText}>Astro Mode</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Recent Bookings matching Screen 3 */}
+          <View style={s.recentHeader}>
+            <Text style={s.sectionTitle}>Recent Bookings</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('BookingsList')}>
+              <Text style={s.viewAllText}>View All →</Text>
+            </TouchableOpacity>
+          </View>
+
+          {recentBookings.length > 0 ? (
+            <View style={{ gap: 12 }}>
+              {recentBookings.map((item) => {
+                const badge = getStatusStyle(item.status);
+                const id = item.id || item._id || item.bookingId;
+                const title = item.ritualName || item.title || item.poojaName || item.service || 'Satyanarayan Pooja';
+                const time =
+                  item.scheduledDate
+                    ? `${item.scheduledDate}${item.scheduledTime ? ` • ${item.scheduledTime}` : ''}`
+                    : item.timeSlot || item.time || 'Scheduled';
+                const price = item.totalAmount ?? item.amount ?? item.total ?? item.price ?? 0;
+                return (
+                  <TouchableOpacity
+                    key={id || title}
+                    activeOpacity={0.88}
+                    onPress={() => navigation.navigate('BookingDetails', { bookingId: id, booking: item })}
+                    style={s.bookingCard}
+                  >
+                    <Image source={PUJA_THUMB} style={s.bookingThumb} />
+                    <View style={s.bookingInfo}>
+                      <Text style={s.bookingTitle} numberOfLines={1}>{title}</Text>
+                      <Text style={s.bookingTime} numberOfLines={1}>{time}</Text>
+                      <Text style={s.bookingPrice}>₹ {Number(price).toLocaleString('en-IN')}</Text>
+                    </View>
+                    <View style={[s.statusPill, { backgroundColor: badge.bg }]}>
+                      <Text style={[s.statusPillText, { color: badge.text }]}>{badge.label}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : (
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => navigation.navigate('PoojaServices')}
+              style={s.emptyBookingsCard}
+            >
+              <View style={s.emptyIconCircle}>
+                <MaterialCommunityIcons name="calendar-clock" size={26} color="#D48B28" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.emptyTitle}>No Recent Bookings Yet</Text>
+                <Text style={s.emptySub}>
+                  Keep your status Online — incoming pooja & yajman requests appear here instantly.
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        </View>
       </ScrollView>
 
       {/* Real-time Rapido/Uber Pooja Request Modal */}
@@ -479,7 +568,7 @@ export default function VendorHomeScreen({ navigation }) {
         onDecline={handleDeclineJob}
       />
 
-      {/* Real-time Astrologer Agora Incoming Audio / Video Call Modal */}
+      {/* Real-time Astrologer Agora Incoming Call Modal */}
       <Modal
         visible={!!incomingCall}
         transparent
@@ -488,10 +577,7 @@ export default function VendorHomeScreen({ navigation }) {
       >
         <View style={s.callModalOverlay}>
           <View style={s.callModalCard}>
-            <LinearGradient
-              colors={['#2D0B3F', '#4A154B']}
-              style={s.callModalGrad}
-            >
+            <LinearGradient colors={['#2D0B3F', '#4A154B']} style={s.callModalGrad}>
               <View style={s.callPulseDisc}>
                 <MaterialCommunityIcons
                   name={
@@ -523,18 +609,12 @@ export default function VendorHomeScreen({ navigation }) {
               </Text>
 
               <View style={s.callActionButtons}>
-                <TouchableOpacity
-                  style={[s.callBtn, s.declineCallBtn]}
-                  onPress={handleDeclineCall}
-                >
+                <TouchableOpacity style={[s.callBtn, s.declineCallBtn]} onPress={handleDeclineCall}>
                   <MaterialCommunityIcons name="phone-hangup" size={24} color="#FFFFFF" />
                   <Text style={s.callBtnText}>Decline</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[s.callBtn, s.acceptCallBtn]}
-                  onPress={handleAcceptCall}
-                >
+                <TouchableOpacity style={[s.callBtn, s.acceptCallBtn]} onPress={handleAcceptCall}>
                   <MaterialCommunityIcons
                     name={
                       incomingCall?.mode === 'video'
@@ -553,246 +633,370 @@ export default function VendorHomeScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      <PanditAstroToggleCard />
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#FBF8F2',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#FBF8F2',
-  },
-  content: {
+  safe: { flex: 1, backgroundColor: '#FBF6EE' },
+  container: { flex: 1, backgroundColor: '#FBF6EE' },
+  content: { paddingBottom: 24 },
+  curvedHeader: {
+    paddingTop: Platform.OS === 'android' ? 42 : 52,
     paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 24,
+    paddingBottom: 56,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
-  topBar: {
+  headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
   },
-  brandTitle: {
-    fontSize: 22,
+  greetingSmall: {
+    fontSize: 13.5,
+    color: '#F5DFC4',
+    fontWeight: '500',
+  },
+  partnerName: {
+    fontSize: 20,
     fontWeight: '800',
-    color: '#67101F',
-    letterSpacing: 0.3,
-    fontFamily: 'serif',
+    color: '#FFFFFF',
+    fontFamily: serif,
+    marginTop: 2,
   },
-  partnerSubtitle: {
-    fontSize: 12.5,
-    color: '#7D686B',
-    fontWeight: '600',
-    marginTop: 1,
-  },
-  topRightActions: {
+  onlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 7,
   },
-  bellBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#EDE4DA',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  redBadge: {
-    position: 'absolute',
-    top: 9,
-    right: 10,
+  onlineDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#D13939',
+    backgroundColor: '#4ADE80',
+    marginRight: 6,
   },
-  avatarWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FDF5EA',
-    borderWidth: 1.5,
-    borderColor: '#D48B28',
-    overflow: 'hidden',
+  onlineText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  bellBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  redBadge: {
+    position: 'absolute',
+    top: 7,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#F87171',
+  },
+  avatarRing: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 2,
+    borderColor: '#F7C966',
+    overflow: 'hidden',
+    backgroundColor: '#FFF6E3',
   },
   avatarImg: {
     width: '100%',
     height: '100%',
   },
-  avatarPlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  overviewCard: {
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 26,
-    shadowColor: '#67101F',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.28,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  overviewHeading: {
-    fontSize: 13,
-    color: '#F4D8DE',
-    fontWeight: '600',
-    marginBottom: 14,
-    letterSpacing: 0.2,
-  },
-  overviewRow: {
+  metricsWrap: {
     flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: 18,
+    gap: 12,
+    marginTop: -32,
   },
-  metricCol: {
+  metricCard: {
     flex: 1,
-  },
-  metricValue: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  metricLabel: {
-    fontSize: 12,
-    color: '#F4D8DE',
-    fontWeight: '500',
-  },
-  metricDivider: {
-    width: 1,
-    height: 44,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    marginHorizontal: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#2E1418',
-    marginBottom: 14,
-    fontFamily: 'serif',
-  },
-  grid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 14,
-    marginBottom: 24,
-  },
-  actionCard: {
-    width: '47.5%',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 18,
-    paddingVertical: 18,
-    paddingHorizontal: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#EFE2D1',
+    shadowColor: '#67101F',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  metricIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#FBECEE',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#EDE4DA',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-    minHeight: 120,
+    marginRight: 10,
   },
-  actionIconCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#FDF5EA',
-    borderWidth: 1,
-    borderColor: '#F6E4CF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
+  metricLabel: {
+    fontSize: 11.5,
+    color: '#7D686B',
+    fontWeight: '600',
   },
-  actionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
+  metricValue: {
+    fontSize: 18,
+    fontWeight: '800',
     color: '#2E1418',
-    textAlign: 'center',
-    lineHeight: 17,
+    marginTop: 2,
   },
-  devotionBanner: {
+  bodyPad: {
+    paddingHorizontal: 18,
+    paddingTop: 20,
+  },
+  activeResumeCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 18,
-    overflow: 'hidden',
-    shadowColor: '#000',
+    padding: 15,
+    marginBottom: 18,
+    borderWidth: 1.5,
+    borderColor: '#D48B28',
+    shadowColor: '#67101F',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.1,
     shadowRadius: 6,
     elevation: 3,
   },
-  devotionBannerGrad: {
+  activeTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
   },
-  devotionTextWrap: {
-    flex: 1,
+  activeDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: '#1E8E4A',
+    marginRight: 7,
   },
-  devotionTitle: {
+  activeStatusText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#1E8E4A',
+  },
+  activeTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#FFFFFF',
-    fontFamily: 'serif',
+    color: '#2E1418',
+    fontFamily: serif,
+    marginTop: 6,
   },
-  devotionSub: {
-    fontSize: 13,
-    color: '#F4D8DE',
-    fontWeight: '500',
+  activeSub: {
+    fontSize: 12,
+    color: '#7D686B',
     marginTop: 2,
   },
-  devotionTempleImg: {
-    width: 80,
-    height: 60,
-    opacity: 0.85,
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#2E1418',
+    fontFamily: serif,
+    marginBottom: 12,
+  },
+  quickCircleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  quickCircleItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  quickCircle: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#FFF5E4',
+    borderWidth: 1.2,
+    borderColor: '#EBD3B0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 7,
+    shadowColor: '#67101F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  quickCircleLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3A1F23',
+    textAlign: 'center',
+  },
+  shortcutRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 22,
+  },
+  shortcutChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 6,
+    borderWidth: 1,
+    borderColor: '#EFE2D1',
+    gap: 5,
+  },
+  shortcutChipText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#4A2B2F',
+  },
+  recentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  viewAllText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#67101F',
+    marginBottom: 12,
+  },
+  bookingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#EFE2D1',
+    shadowColor: '#67101F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  bookingThumb: {
+    width: 54,
+    height: 54,
+    borderRadius: 12,
+    marginRight: 12,
+    backgroundColor: '#FAF2E6',
+  },
+  bookingInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  bookingTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: '#2E1418',
+    fontFamily: serif,
+  },
+  bookingTime: {
+    fontSize: 12,
+    color: '#7D686B',
+    marginTop: 2,
+  },
+  bookingPrice: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#67101F',
+    marginTop: 3,
+  },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  emptyBookingsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#EFE2D1',
+  },
+  emptyIconCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FFF5E4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  emptyTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: '#2E1418',
+    fontFamily: serif,
+  },
+  emptySub: {
+    fontSize: 12,
+    color: '#7D686B',
+    marginTop: 3,
+    lineHeight: 17,
   },
   callModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(15, 5, 25, 0.78)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: 20,
   },
   callModalCard: {
     width: '100%',
+    maxWidth: 360,
     borderRadius: 24,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 10,
+    borderWidth: 2,
+    borderColor: '#FFD700',
   },
   callModalGrad: {
-    padding: 28,
+    padding: 24,
     alignItems: 'center',
   },
   callPulseDisc: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(255,215,0,0.18)',
+    backgroundColor: 'rgba(255, 215, 0, 0.16)',
     borderWidth: 2,
     borderColor: '#FFD700',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   callIncomingBadge: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     color: '#FFD700',
     letterSpacing: 1,
@@ -802,38 +1006,29 @@ const s = StyleSheet.create({
     fontSize: 22,
     fontWeight: '800',
     color: '#FFFFFF',
-    fontFamily: 'serif',
-    marginBottom: 4,
     textAlign: 'center',
+    marginBottom: 4,
   },
   callRateText: {
-    fontSize: 14,
-    color: '#E0D0EA',
+    fontSize: 13.5,
+    color: '#D8BFD8',
     marginBottom: 24,
   },
   callActionButtons: {
     flexDirection: 'row',
-    width: '100%',
     gap: 16,
+    width: '100%',
   },
   callBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     paddingVertical: 14,
-    borderRadius: 14,
+    borderRadius: 16,
+    gap: 8,
   },
-  declineCallBtn: {
-    backgroundColor: '#E53935',
-  },
-  acceptCallBtn: {
-    backgroundColor: '#2E7D32',
-  },
-  callBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
+  declineCallBtn: { backgroundColor: '#D32F2F' },
+  acceptCallBtn: { backgroundColor: '#2E7D32' },
+  callBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
 });

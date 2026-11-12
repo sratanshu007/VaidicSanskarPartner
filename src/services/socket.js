@@ -17,10 +17,13 @@ class PartnerSocket {
     this.emitQueue = [];
     this.activeAstroPayload = null;
     this.registeredServerEvents = new Set();
-    this.autoConnect();
+    if (getAuthToken()) {
+      this.autoConnect();
+    }
   }
 
   autoConnect() {
+    if (this.socket) return;
     try {
       const socketHost = (process.env.EXPO_PUBLIC_SOCKET_URL || 'https://vaidic-sanskar-admin-suite.onrender.com').replace(/\/api\/partner\/?$/, '').replace(/\/api\/?$/, '');
       const token = getAuthToken();
@@ -29,10 +32,11 @@ class PartnerSocket {
         auth: { token },
         query: { role: 'vendor' },
         transports: ['websocket', 'polling'],
-        timeout: 10000,
+        timeout: 15000,
         reconnection: true,
-        reconnectionAttempts: 25,
-        reconnectionDelay: 1500,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 10000,
       });
 
       this.socket.on('connect', () => {
@@ -90,6 +94,7 @@ class PartnerSocket {
         'astro:call:connected',
         'astro:call:declined',
         'astro:call:ended',
+        'astro:call:taken',
         'astro:chat:message',
         'astro:presence',
         'astro:online',
@@ -118,13 +123,19 @@ class PartnerSocket {
     });
   }
 
-  connect(token) {
-    if (this.socket && this.connected) return;
-    if (this.socket) {
-      if (token) this.socket.auth = { token };
-      this.socket.connect();
-    } else {
+  connect(token, vendorId) {
+    if (!this.socket) {
       this.autoConnect();
+    }
+    if (this.socket) {
+      this.socket.auth = { ...(this.socket.auth || {}), ...(token ? { token } : {}), ...(vendorId ? { userId: vendorId } : {}) };
+      if (!this.connected) {
+        this.socket.connect();
+      }
+      if (vendorId) {
+        this.emit('vendor:join', { vendorId });
+        this.emit('pandit:join', { vendorId });
+      }
     }
   }
 
@@ -174,6 +185,8 @@ class PartnerSocket {
       } else {
         this.activeAstroPayload = null;
       }
+    } else if (event === 'astro:offline') {
+      this.activeAstroPayload = null;
     }
 
     if (this.socket && this.connected) {

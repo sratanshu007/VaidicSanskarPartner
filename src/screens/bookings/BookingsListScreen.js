@@ -1,286 +1,493 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
+  FlatList,
   TouchableOpacity,
-  ScrollView,
-  StatusBar,
+  Image,
+  RefreshControl,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { serif, shadow } from '../../theme/styles';
 import { usePartner } from '../../context/PartnerContext';
-import colors from '../../theme/colors';
+import { JobService } from '../../services/api';
+import socket from '../../services/socket';
 
-const TABS = ['Upcoming', 'Completed', 'Cancelled'];
+const FILTER_TABS = [
+  { key: 'new', label: 'New' },
+  { key: 'confirmed', label: 'Confirmed' },
+  { key: 'completed', label: 'Completed' },
+];
 
-export default function BookingsListScreen({ navigation }) {
-  const { bookings } = usePartner();
-  const [selectedTab, setSelectedTab] = useState('Upcoming');
+const isPendingStatus = (st) => {
+  const s = String(st || '').toLowerCase();
+  return !s || s === 'pending' || s === 'pending_acceptance' || s === 'requested' || s === 'broadcast' || s === 'new';
+};
 
-  const filteredBookings = bookings.filter((b) => {
-    if (b.filterStatus === selectedTab) return true;
-    const st = String(b.status || '').toUpperCase();
-    if (selectedTab === 'Upcoming') {
-      return (
-        !st ||
-        st === 'CONFIRMED' ||
-        st === 'ACCEPTED' ||
-        st === 'IN_PROGRESS' ||
-        st === 'ASSIGNED' ||
-        st === 'REQUESTED' ||
-        st === 'ON_THE_WAY' ||
-        st === 'ARRIVED'
+const isConfirmedStatus = (st) => {
+  const s = String(st || '').toLowerCase();
+  return (
+    s === 'confirmed' ||
+    s === 'accepted' ||
+    s === 'ongoing' ||
+    s === 'in_progress' ||
+    s === 'pooja_started' ||
+    s === 'started' ||
+    s === 'en_route' ||
+    s === 'on_the_way' ||
+    s === 'arrived' ||
+    s === 'completion_requested'
+  );
+};
+
+const isCompletedStatus = (st) => {
+  const s = String(st || '').toLowerCase();
+  return s === 'completed' || s === 'done' || s === 'finished';
+};
+
+const formatAmount = (val) => {
+  const n = Number(val || 0);
+  if (!Number.isFinite(n)) return '0';
+  return n.toLocaleString('en-IN');
+};
+
+export default function BookingsListScreen({ navigation, route }) {
+  const { bookings, setBookings, refreshBookings, vendor } = usePartner();
+
+  const initialTab = route?.params?.initialTab || 'new';
+  const [activeTab, setActiveTab] = useState(initialTab);
+  const [refreshing, setRefreshing] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+
+  const list = Array.isArray(bookings) ? bookings : [];
+
+  const counts = useMemo(() => {
+    let n = 0;
+    let c = 0;
+    let d = 0;
+    list.forEach((b) => {
+      if (isPendingStatus(b.status)) n += 1;
+      else if (isConfirmedStatus(b.status)) c += 1;
+      else if (isCompletedStatus(b.status)) d += 1;
+    });
+    return { new: n, confirmed: c, completed: d };
+  }, [list]);
+
+  const filteredBookings = useMemo(() => {
+    return list.filter((b) => {
+      if (activeTab === 'new') return isPendingStatus(b.status);
+      if (activeTab === 'confirmed') return isConfirmedStatus(b.status);
+      if (activeTab === 'completed') return isCompletedStatus(b.status);
+      return true;
+    });
+  }, [list, activeTab]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshBookings?.();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshBookings]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshBookings?.();
+    }, [refreshBookings])
+  );
+
+  const handleAccept = async (item) => {
+    const id = item.id || item._id || item.bookingId;
+    if (!id) return;
+    setBusyId(id);
+    try {
+      try {
+        await JobService.accept(id);
+      } catch (err) {
+        console.log('Job accept API notice:', err?.message);
+      }
+      socket.emit('job:accept', {
+        bookingId: id,
+        job_id: id,
+        vendorId: vendor?.id || vendor?._id || vendor?.email,
+        vendorName: vendor?.name,
+        vendorPhone: vendor?.phone,
+      });
+      setBookings?.((prev) =>
+        (prev || []).map((b) =>
+          (b.id || b._id || b.bookingId) === id ? { ...b, status: 'confirmed' } : b
+        )
       );
-    }
-    if (selectedTab === 'Completed') {
-      return st === 'COMPLETED';
-    }
-    if (selectedTab === 'Cancelled') {
-      return st === 'CANCELLED' || st === 'DECLINED';
-    }
-    return true;
-  });
-
-  const getIconForType = (type) => {
-    switch (type) {
-      case 'shiva':
-        return { name: 'om', color: '#D48B28' };
-      case 'kundali':
-        return { name: 'creation', color: '#D48B28' };
-      default:
-        return { name: 'fire', color: '#D48B28' };
+      Alert.alert('Booking Accepted', `${item.poojaName || item.title || 'Puja'} is now confirmed.`);
+    } finally {
+      setBusyId(null);
     }
   };
 
-  return (
-    <SafeAreaView style={s.safe} edges={['top', 'bottom', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FBF8F2" />
-      <View style={s.container}>
-        {/* Header */}
-        <View style={s.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={s.backBtn}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <MaterialCommunityIcons name="chevron-left" size={28} color="#2E1418" />
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>My Bookings</Text>
-          <View style={{ width: 36 }} />
+  const handleReject = async (item) => {
+    const id = item.id || item._id || item.bookingId;
+    if (!id) return;
+    setBusyId(id);
+    try {
+      try {
+        await JobService.decline(id);
+      } catch (err) {
+        console.log('Job decline API notice:', err?.message);
+      }
+      socket.emit('job:decline', {
+        bookingId: id,
+        job_id: id,
+        vendorId: vendor?.id || vendor?._id || vendor?.email,
+      });
+      setBookings?.((prev) =>
+        (prev || []).filter((b) => (b.id || b._id || b.bookingId) !== id)
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const renderCard = ({ item }) => {
+    const id = item.id || item._id || item.bookingId;
+    const title = item.ritualName || item.poojaName || item.serviceName || item.title || 'Satyanarayan Pooja';
+    const dateLabel = item.scheduledDate || item.date || item.bookingDate || 'Today';
+    const timeLabel = item.scheduledTime || item.time || item.slot || '10:00 AM';
+    const amount = item.totalAmount ?? item.amount ?? item.dakshina ?? item.price ?? 2500;
+    const pending = isPendingStatus(item.status);
+    const completed = isCompletedStatus(item.status);
+    const stLower = String(item.status || '').toLowerCase();
+    const activeLabel =
+      stLower === 'arrived'
+        ? 'Arrived'
+        : stLower === 'pooja_started' || stLower === 'in_progress'
+        ? 'In Progress'
+        : stLower === 'en_route' || stLower === 'on_the_way'
+        ? 'On The Way'
+        : 'Confirmed';
+    const busy = busyId === id;
+
+    return (
+      <TouchableOpacity
+        activeOpacity={0.9}
+        style={[styles.card, shadow]}
+        onPress={() => navigation.navigate('BookingDetails', { bookingId: id, booking: item })}
+      >
+        <View style={styles.cardTop}>
+          <Image
+            source={require('../../../assets/banner_havan_kund.png')}
+            style={styles.thumb}
+            resizeMode="cover"
+          />
+          <View style={styles.cardInfo}>
+            <Text style={styles.cardTitle} numberOfLines={1}>
+              {title}
+            </Text>
+            <Text style={styles.cardDate}>
+              {dateLabel} • {timeLabel}
+            </Text>
+            <Text style={styles.cardAmount}>₹ {formatAmount(amount)}</Text>
+          </View>
+
+          {!pending && (
+            <View
+              style={[
+                styles.statusPill,
+                isCompletedStatus(item.status) ? styles.completedPill : styles.confirmedPill,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusText,
+                  completed ? styles.completedText : styles.confirmedText,
+                ]}
+              >
+                {completed ? 'Completed' : activeLabel}
+              </Text>
+            </View>
+          )}
         </View>
 
-        {/* Filter Tabs */}
-        <View style={s.tabContainer}>
-          {TABS.map((tab) => {
-            const isActive = selectedTab === tab;
+        {pending && (
+          <View style={styles.actionsRow}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              disabled={busy}
+              style={styles.rejectBtn}
+              onPress={() => handleReject(item)}
+            >
+              <Text style={styles.rejectText}>Reject</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              disabled={busy}
+              style={styles.acceptBtn}
+              onPress={() => handleAccept(item)}
+            >
+              {busy ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.acceptText}>Accept</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        {navigation.canGoBack() ? (
+          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.goBack()}>
+            <Ionicons name="chevron-back" size={24} color="#4A0813" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.iconBtn} />
+        )}
+        <Text style={styles.headerTitle}>Booking Requests</Text>
+        <TouchableOpacity style={styles.iconBtn} onPress={onRefresh}>
+          <Ionicons name="ellipsis-vertical" size={20} color="#4A0813" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Segmented Tabs: New (N) | Confirmed | Completed */}
+      <View style={styles.segmentWrap}>
+        <View style={styles.segmentBar}>
+          {FILTER_TABS.map((tab) => {
+            const active = activeTab === tab.key;
+            const label =
+              tab.key === 'new' ? `${tab.label} (${counts.new})` : tab.label;
             return (
               <TouchableOpacity
-                key={tab}
-                activeOpacity={0.8}
-                onPress={() => setSelectedTab(tab)}
-                style={[s.tabPill, isActive && s.tabPillActive]}
+                key={tab.key}
+                activeOpacity={0.85}
+                style={[styles.segmentBtn, active && styles.segmentBtnActive]}
+                onPress={() => setActiveTab(tab.key)}
               >
-                <Text style={[s.tabText, isActive && s.tabTextActive]}>{tab}</Text>
+                <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                  {label}
+                </Text>
               </TouchableOpacity>
             );
           })}
         </View>
-
-        <ScrollView
-          style={s.scroll}
-          contentContainerStyle={s.content}
-          showsVerticalScrollIndicator={false}
-        >
-          {filteredBookings.length > 0 ? (
-            <View style={s.list}>
-              {filteredBookings.map((item) => {
-                const iconInfo = getIconForType(item.imageType);
-                const title = item.title || item.poojaName || item.service || 'Vaidic Pooja';
-                const time = item.time || item.scheduledDate || (item.date ? `${item.date} ${item.slot || ''}` : 'Scheduled');
-                const locRaw = item.location || item.address || item.customer?.address || 'Customer Location';
-                const loc = String(locRaw).startsWith('Location:') ? locRaw : `Location: ${locRaw}`;
-                const statusStr = item.status || 'Confirmed';
-
-                return (
-                  <TouchableOpacity
-                    key={item.id || item._id}
-                    activeOpacity={0.88}
-                    onPress={() => navigation.navigate('BookingDetails', { bookingId: item.id || item._id })}
-                    style={s.bookingCard}
-                  >
-                    {/* Deity / Ritual Thumbnail */}
-                    <View style={s.thumbnailCircle}>
-                      <MaterialCommunityIcons
-                        name={iconInfo.name}
-                        size={24}
-                        color={iconInfo.color}
-                      />
-                    </View>
-
-                    {/* Booking Details */}
-                    <View style={s.cardInfo}>
-                      <Text style={s.cardTitle}>{title}</Text>
-                      <Text style={s.cardTime}>{time}</Text>
-                      <Text style={s.cardLocation}>{loc}</Text>
-
-                      <View style={s.badgeWrap}>
-                        <View style={s.confirmedBadge}>
-                          <Text style={s.confirmedBadgeText}>{statusStr}</Text>
-                        </View>
-                      </View>
-                    </View>
-
-                    {/* Chevron */}
-                    <MaterialCommunityIcons name="chevron-right" size={24} color="#A08E90" />
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ) : (
-            <View style={s.emptyWrap}>
-              <MaterialCommunityIcons name="calendar-blank-outline" size={48} color="#C4B5A8" />
-              <Text style={s.emptyTitle}>No {selectedTab.toLowerCase()} bookings</Text>
-            </View>
-          )}
-        </ScrollView>
       </View>
+
+      {/* Requests List */}
+      <FlatList
+        data={filteredBookings}
+        keyExtractor={(item, idx) => String(item.id || item._id || idx)}
+        renderItem={renderCard}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#67101F"
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyBox}>
+            <Ionicons name="calendar-clear-outline" size={44} color="#B8A392" />
+            <Text style={styles.emptyTitle}>No {activeTab} requests</Text>
+            <Text style={styles.emptySub}>
+              Pull down to refresh or check back when new devotee requests arrive.
+            </Text>
+          </View>
+        }
+      />
     </SafeAreaView>
   );
 }
 
-const s = StyleSheet.create({
+const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#FBF8F2',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#FBF8F2',
+    backgroundColor: '#FBF6EE',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFE4D6',
+    backgroundColor: '#FBF6EE',
   },
-  backBtn: {
+  iconBtn: {
     width: 36,
     height: 36,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'flex-start',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#2E1418',
-    fontFamily: 'serif',
+    fontFamily: serif,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#4A0813',
   },
-  tabContainer: {
+  segmentWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 6,
+  },
+  segmentBar: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 18,
-    gap: 10,
+    backgroundColor: '#F3E9DC',
+    borderRadius: 24,
+    padding: 4,
   },
-  tabPill: {
-    paddingVertical: 8,
-    paddingHorizontal: 20,
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 9,
     borderRadius: 20,
-    backgroundColor: '#F2EAE1',
-    borderWidth: 1,
-    borderColor: '#E8DCD0',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  tabPillActive: {
+  segmentBtnActive: {
     backgroundColor: '#67101F',
-    borderColor: '#67101F',
   },
-  tabText: {
-    fontSize: 13,
+  segmentText: {
+    fontSize: 13.5,
     fontWeight: '600',
-    color: '#5C4447',
+    color: '#5C4438',
   },
-  tabTextActive: {
+  segmentTextActive: {
     color: '#FFFFFF',
     fontWeight: '700',
   },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: 20,
+  listContent: {
+    padding: 16,
     paddingBottom: 32,
   },
-  list: {
-    gap: 14,
-  },
-  bookingCard: {
+  card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: 16,
+    padding: 13,
+    borderWidth: 1,
+    borderColor: '#EADFD1',
+    marginBottom: 14,
+  },
+  cardTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#EDE4DA',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
+    gap: 12,
   },
-  thumbnailCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#FDF5EA',
-    borderWidth: 1,
-    borderColor: '#F6E4CF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
+  thumb: {
+    width: 62,
+    height: 62,
+    borderRadius: 12,
+    backgroundColor: '#EFE4D6',
   },
   cardInfo: {
     flex: 1,
   },
   cardTitle: {
+    fontFamily: serif,
+    fontSize: 16.5,
+    fontWeight: '700',
+    color: '#2F1510',
+  },
+  cardDate: {
+    fontSize: 13,
+    color: '#7A6859',
+    marginTop: 3,
+  },
+  cardAmount: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#2E1418',
-    marginBottom: 3,
+    color: '#B55B19',
+    marginTop: 4,
   },
-  cardTime: {
-    fontSize: 12.5,
-    color: '#7D686B',
-    marginBottom: 2,
-  },
-  cardLocation: {
-    fontSize: 12,
-    color: '#7D686B',
-    marginBottom: 6,
-  },
-  badgeWrap: {
-    flexDirection: 'row',
-  },
-  confirmedBadge: {
-    backgroundColor: '#EBF8F0',
-    paddingVertical: 3,
+  statusPill: {
     paddingHorizontal: 10,
-    borderRadius: 6,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
-  confirmedBadgeText: {
+  confirmedPill: {
+    backgroundColor: '#E7F6EC',
+  },
+  completedPill: {
+    backgroundColor: '#F3EDE4',
+  },
+  statusText: {
     fontSize: 11.5,
     fontWeight: '700',
+  },
+  confirmedText: {
     color: '#1E8E4A',
   },
-  emptyWrap: {
+  completedText: {
+    color: '#6A5446',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F4ECE2',
+  },
+  rejectBtn: {
+    minWidth: 88,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#DECFC0',
+    backgroundColor: '#FFFDF9',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingHorizontal: 16,
+  },
+  rejectText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#5D4037',
+  },
+  acceptBtn: {
+    minWidth: 96,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#67101F',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  acceptText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  emptyBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 56,
+    paddingHorizontal: 24,
   },
   emptyTitle: {
-    fontSize: 14,
-    color: '#7D686B',
-    marginTop: 10,
+    fontFamily: serif,
+    fontSize: 17.5,
+    fontWeight: '700',
+    color: '#4A0813',
+    marginTop: 12,
+  },
+  emptySub: {
+    fontSize: 13,
+    color: '#8B7666',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 19,
   },
 });

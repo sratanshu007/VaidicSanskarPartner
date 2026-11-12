@@ -174,8 +174,18 @@ export default function AstrologyServicesScreen({ navigation }) {
       navigation.navigate('AstroSession');
     } else {
       navigation.navigate('InCall', {
-        caller: call.caller || { name: 'Customer / Devotee', mode: call.mode || 'video', rate: call.rate || 5, id: call.caller?.id },
+        caller: {
+          ...(call.caller || {}),
+          name: call.userName || call.caller?.name || 'Customer / Devotee',
+          mode: call.mode || 'video',
+          rate: call.rate || 5,
+          id: call.caller?.id || call.userId || 'U101',
+          agoraToken: call.agoraToken,
+        },
         channelName: call.channelName,
+        agoraToken: call.agoraToken,
+        vendorId: vendor?.id || 'V4569',
+        alreadyAccepted: true,
       });
     }
   };
@@ -217,7 +227,7 @@ export default function AstrologyServicesScreen({ navigation }) {
         {/* Header */}
         <View style={s.header}>
           <TouchableOpacity
-            onPress={() => navigation.goBack()}
+            onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('AstroHome'))}
             style={s.backBtn}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
@@ -478,17 +488,17 @@ export default function AstrologyServicesScreen({ navigation }) {
                 <Text style={s.statsHeader}>आज का परामर्श विवरण (Today's Ledger)</Text>
                 <View style={s.statsGrid}>
                   <View style={s.statCol}>
-                    <Text style={s.statVal}>₹{stats.todayEarnings || 1840}</Text>
+                    <Text style={s.statVal}>₹{Number(stats.todayEarnings || 0)}</Text>
                     <Text style={s.statLabel}>कुल मानदेय</Text>
                   </View>
                   <View style={s.statDivider} />
                   <View style={s.statCol}>
-                    <Text style={s.statVal}>{stats.todayMinutes || 98} m</Text>
+                    <Text style={s.statVal}>{Number(stats.todayMinutes || 0)} m</Text>
                     <Text style={s.statLabel}>कुल समय</Text>
                   </View>
                   <View style={s.statDivider} />
                   <View style={s.statCol}>
-                    <Text style={s.statVal}>⭐ {stats.averageRating || '4.96'}</Text>
+                    <Text style={s.statVal}>⭐ {Number(stats.averageRating || 0).toFixed(1)}</Text>
                     <Text style={s.statLabel}>रेटिंग</Text>
                   </View>
                 </View>

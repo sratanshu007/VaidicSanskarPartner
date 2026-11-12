@@ -8,6 +8,8 @@ import {
   ScrollView,
   StatusBar,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
@@ -56,31 +58,60 @@ export default function CompletionOtpScreen({ navigation, route }) {
   };
 
   const handleVerifyCompletion = async () => {
-    const code = otp.join('');
+    const code = otp.join('').trim();
     if (code.length < 4) {
       Alert.alert('अधूरा OTP', 'कृपया 4-अंकों का Completion OTP दर्ज करें।');
       return;
     }
 
     setLoading(true);
+    let verified = false;
+    let serverRejectedMsg = null;
 
-    // 1. Verify in reactive store
-    const storeRes = panditBookingStore.verifyCompleteOtp(code);
-    if (!storeRes.success) {
-      Alert.alert('अमान्य OTP', storeRes.message || 'OTP मेल नहीं खा रहा है। कृपया यजमान से पुनः पुष्टि करें।');
+    // 1. Verify against live backend first
+    try {
+      const apiRes = await JobService.verifyCompleteOtp(bId, code);
+      if (apiRes?.success) {
+        verified = true;
+        panditBookingStore.forceComplete();
+      } else if (apiRes?.message) {
+        serverRejectedMsg = apiRes.message;
+      }
+    } catch (err) {
+      if (err?.status === 400 || err?.status === 429) {
+        serverRejectedMsg = err?.message || 'अमान्य Completion OTP। कृपया यजमान की ऐप से कोड जांचें।';
+      }
+    }
+
+    // 2. Fallback to socket / local booking OTP when offline or socket-only booking
+    if (!verified) {
+      const localExpected = job?.completeOtp || panditBookingStore.getBooking()?.completeOtp;
+      if (localExpected && String(localExpected).trim() === code) {
+        panditBookingStore.setCompleteOtp(localExpected);
+        panditBookingStore.forceComplete();
+        verified = true;
+      } else if (!serverRejectedMsg) {
+        const storeRes = panditBookingStore.verifyCompleteOtp(code);
+        if (storeRes.success) {
+          verified = true;
+        } else {
+          serverRejectedMsg = storeRes.message;
+        }
+      }
+    }
+
+    if (!verified) {
       setLoading(false);
+      Alert.alert(
+        'अमान्य OTP',
+        serverRejectedMsg || 'OTP मेल नहीं खा रहा है। कृपया यजमान से सही Completion OTP पूछें।'
+      );
       return;
     }
 
-    // 2. Broadcast across WebSocket so Devotee screen updates to "COMPLETED"
+    // 3. Broadcast across WebSocket so Devotee screen updates to "COMPLETED"
     socket?.emit?.('booking:completed', { bookingId: bId });
     socket?.emit?.('instant:update', { id: bId, bookingId: bId, status: 'COMPLETED' });
-
-    // 3. REST endpoints
-    try {
-      await JobService.complete(bId, code);
-    } catch (_) { }
-    api.put(`instant/${bId}/complete`, { endOtp: code, completeOtp: code, otp: code }).catch(() => { });
 
     // 4. Credit Pandit Wallet
     try {
@@ -105,7 +136,8 @@ export default function CompletionOtpScreen({ navigation, route }) {
       <StatusBar barStyle="dark-content" backgroundColor="#FBF8F2" />
       <Header title="पूजा समापन एवं दक्षिणा प्राप्ति" subtitle="चरण 3: अंतिम OTP सत्यापन" navigation={navigation} />
 
-      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* RITUAL COMPLETED SUMMARY BANNER */}
         <View style={s.summaryBanner}>
           <LinearGradient colors={['#67101F', '#490B15']} style={s.summaryGrad}>
@@ -179,6 +211,7 @@ export default function CompletionOtpScreen({ navigation, route }) {
 
         <View style={{ height: 120 + insets.bottom }} />
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* BOTTOM ACTION BAR */}
       <View style={[s.bottomBar, { paddingBottom: Math.max(16, insets.bottom + 10) }]}>

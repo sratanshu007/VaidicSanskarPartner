@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -12,26 +12,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { usePartner } from '../../context/PartnerContext';
-import colors from '../../theme/colors';
+import { serif } from '../../theme/styles';
+
+const AVATAR_FALLBACK = require('../../../assets/profile_krishna_avatar.png');
 
 export default function ProfileSettingsScreen({ navigation }) {
-  const { vendor, logout } = usePartner();
+  const { vendor, role } = usePartner();
+  const isAstro = role === 'astro' || vendor?.role === 'astro' || Boolean(vendor?.isAstroEnabled);
 
   const handleLogout = () => {
-    Alert.alert('Log Out', 'Are you sure you want to log out of VaidicSanskar Partner?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log Out',
-        style: 'destructive',
-        onPress: async () => {
-          await logout();
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'Logout' }],
-          });
-        },
-      },
-    ]);
+    navigation.navigate('Logout');
   };
 
   const menuItems = [
@@ -40,18 +30,6 @@ export default function ProfileSettingsScreen({ navigation }) {
       title: 'Personal Information',
       icon: 'account-outline',
       onPress: () => navigation.navigate('ProfileSetup'),
-    },
-    {
-      id: 'kyc',
-      title: 'KYC & Identity Verification',
-      icon: 'shield-check-outline',
-      onPress: () => navigation.navigate('ProfileSetup'),
-    },
-    {
-      id: 'services',
-      title: 'Services & Mandali',
-      icon: 'account-group-outline',
-      onPress: () => navigation.navigate('MandaliManagement'),
     },
     {
       id: 'bank',
@@ -66,16 +44,22 @@ export default function ProfileSettingsScreen({ navigation }) {
         ),
     },
     {
-      id: 'notifications',
-      title: 'Notifications',
-      icon: 'bell-outline',
-      onPress: () => navigation.navigate('Notifications'),
-    },
-    {
       id: 'password',
       title: 'Change Password',
-      icon: 'lock-reset',
+      icon: 'lock-outline',
       onPress: () => Alert.alert('Security', 'A password reset link will be sent to your registered email.'),
+    },
+    {
+      id: 'languages',
+      title: 'Languages',
+      icon: 'translate',
+      onPress: () => navigation.navigate('PoojaServices'),
+    },
+    {
+      id: 'services',
+      title: isAstro ? 'Astrology Dashboard & Rates' : 'My Services & Mandali',
+      icon: isAstro ? 'creation' : 'hands-pray',
+      onPress: () => navigation.navigate(isAstro ? 'AstroDashboard' : 'SelectServices', { manageMode: true }),
     },
     {
       id: 'support',
@@ -85,20 +69,22 @@ export default function ProfileSettingsScreen({ navigation }) {
     },
   ];
 
+  const displayId = vendor?.id || vendor?._id || 'VS102456';
+
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom', 'left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FBF8F2" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FBF6EE" />
       <View style={s.container}>
-        {/* Header */}
+        {/* Header matching Screen 14 */}
         <View style={s.header}>
           <TouchableOpacity
-            onPress={() => navigation.goBack()}
+            onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate(isAstro ? 'AstroHome' : 'Home'))}
             style={s.backBtn}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             <MaterialCommunityIcons name="chevron-left" size={28} color="#2E1418" />
           </TouchableOpacity>
-          <Text style={s.headerTitle}>Profile & Settings</Text>
+          <Text style={s.headerTitle}>Profile</Text>
           <View style={{ width: 36 }} />
         </View>
 
@@ -107,55 +93,48 @@ export default function ProfileSettingsScreen({ navigation }) {
           contentContainerStyle={s.content}
           showsVerticalScrollIndicator={false}
         >
-          {/* User Profile Header Card */}
-          <View style={s.userCard}>
-            <View style={s.avatarCircle}>
-              {vendor?.photo ? (
-                <Image source={{ uri: vendor.photo }} style={s.avatarImg} />
-              ) : (
-                <MaterialCommunityIcons name="account" size={34} color="#67101F" />
-              )}
+          {/* Centered Pandit Avatar & Identity matching Screen 14 */}
+          <View style={s.profileHero}>
+            <View style={s.avatarOuter}>
+              <Image
+                source={vendor?.photo ? { uri: vendor.photo } : AVATAR_FALLBACK}
+                style={s.avatarImg}
+              />
             </View>
-
-            <View style={s.userInfo}>
-              <Text style={s.userName}>{vendor?.name || 'Verified Partner'}</Text>
-              <Text style={s.userEmail}>{vendor?.email || vendor?.phone || 'Account Active'}</Text>
-              <View style={s.ratingRow}>
-                <MaterialCommunityIcons name="star" size={14} color="#F5A623" />
-                <Text style={s.ratingText}>
-                  {vendor?.rating ? String(vendor.rating) : 'New'} ({vendor?.reviewsCount || 0} reviews)
-                </Text>
-              </View>
-            </View>
+            <Text style={s.userName}>{vendor?.name || 'VaidicSanskar Partner'}</Text>
+            <Text style={s.userId}>ID: {String(displayId).slice(0, 12)}</Text>
           </View>
 
-          {/* Settings Menu List */}
+          {/* Menu Rows Card Stack */}
           <View style={s.menuList}>
             {menuItems.map((item) => (
               <TouchableOpacity
                 key={item.id}
-                activeOpacity={0.8}
+                activeOpacity={0.82}
                 onPress={item.onPress}
                 style={s.menuItem}
               >
                 <View style={s.menuIconWrap}>
-                  <MaterialCommunityIcons name={item.icon} size={22} color="#67101F" />
+                  <MaterialCommunityIcons name={item.icon} size={20} color="#67101F" />
                 </View>
                 <Text style={s.menuTitle}>{item.title}</Text>
                 <MaterialCommunityIcons name="chevron-right" size={22} color="#A08E90" />
               </TouchableOpacity>
             ))}
-          </View>
 
-          {/* Log Out Link */}
-          <TouchableOpacity
-            activeOpacity={0.75}
-            onPress={handleLogout}
-            style={s.logoutRow}
-          >
-            <MaterialCommunityIcons name="logout" size={20} color="#D13939" style={{ marginRight: 8 }} />
-            <Text style={s.logoutText}>Log Out</Text>
-          </TouchableOpacity>
+            {/* Red Logout Row matching Screen 14 */}
+            <TouchableOpacity
+              activeOpacity={0.82}
+              onPress={handleLogout}
+              style={s.menuItem}
+            >
+              <View style={[s.menuIconWrap, { backgroundColor: '#FDECEC' }]}>
+                <MaterialCommunityIcons name="logout" size={20} color="#D13939" />
+              </View>
+              <Text style={[s.menuTitle, { color: '#D13939' }]}>Logout</Text>
+              <MaterialCommunityIcons name="chevron-right" size={22} color="#D13939" />
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -163,137 +142,86 @@ export default function ProfileSettingsScreen({ navigation }) {
 }
 
 const s = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#FBF8F2',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#FBF8F2',
-  },
+  safe: { flex: 1, backgroundColor: '#FBF6EE' },
+  container: { flex: 1, backgroundColor: '#FBF6EE' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#2E1418',
-    fontFamily: 'serif',
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-  },
-  userCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 18,
-    flexDirection: 'row',
+  backBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'flex-start' },
+  headerTitle: { fontSize: 19, fontWeight: '800', color: '#2E1418', fontFamily: serif },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: 20, paddingBottom: 36 },
+  profileHero: {
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#EDE4DA',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-    marginBottom: 24,
+    marginTop: 8,
+    marginBottom: 22,
   },
-  avatarCircle: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: '#FDF5EA',
-    borderWidth: 1.5,
+  avatarOuter: {
+    width: 94,
+    height: 94,
+    borderRadius: 47,
+    borderWidth: 2.5,
     borderColor: '#D48B28',
-    alignItems: 'center',
-    justifyContent: 'center',
     overflow: 'hidden',
-    marginRight: 16,
+    backgroundColor: '#FFF6E3',
+    marginBottom: 12,
+    shadowColor: '#67101F',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 6,
+    elevation: 4,
   },
   avatarImg: {
     width: '100%',
     height: '100%',
   },
-  userInfo: {
-    flex: 1,
-  },
   userName: {
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: '800',
     color: '#2E1418',
-    marginBottom: 2,
+    fontFamily: serif,
+    textAlign: 'center',
   },
-  userEmail: {
-    fontSize: 13,
+  userId: {
+    fontSize: 12.5,
     color: '#7D686B',
-    marginBottom: 4,
+    fontWeight: '600',
+    marginTop: 3,
   },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  ratingText: {
-    fontSize: 12,
-    color: '#7D686B',
-    fontWeight: '500',
-  },
-  menuList: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#EDE4DA',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-    marginBottom: 24,
-  },
+  menuList: { gap: 11 },
   menuItem: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5EFE7',
+    borderWidth: 1,
+    borderColor: '#EFE2D1',
+    shadowColor: '#67101F',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
   menuIconWrap: {
-    width: 32,
-    alignItems: 'flex-start',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#FDF3E3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
   menuTitle: {
     flex: 1,
     fontSize: 14.5,
-    fontWeight: '600',
-    color: '#2E1418',
-  },
-  logoutRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    marginTop: 6,
-  },
-  logoutText: {
-    fontSize: 15,
     fontWeight: '700',
-    color: '#D13939',
+    color: '#2E1418',
   },
 });

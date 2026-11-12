@@ -50,7 +50,7 @@ export default function PoojaCompletedScreen({ navigation, route }) {
         <Text style={s.heroSub}>सम्पूर्ण वैदिक विधि-विधान से पूजा संपन्न कराई गई।</Text>
       </LinearGradient>
 
-      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* EARNINGS UNLOCKED CARD */}
         <View style={s.earningCard}>
           <View style={s.earningTop}>

@@ -7,6 +7,7 @@ import {
   TextInput,
   ScrollView,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -71,9 +72,11 @@ export default function ReviewScreen({ navigation, route }) {
         showBack={false}
       />
 
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView
         contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Payout Unlocked Banner */}
         <View style={s.payoutCard}>
@@ -169,6 +172,7 @@ export default function ReviewScreen({ navigation, route }) {
           <Text style={s.submitBtnText}>मूल्यांकन सबमिट करें व होम पर जाएं ›</Text>
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }

@@ -279,9 +279,48 @@ class PanditBookingStore {
     return { success: true };
   }
 
+  setStartOtp(otp) {
+    if (this.booking && otp) {
+      this.booking.startOtp = String(otp).trim();
+      this.notify();
+    }
+  }
+
+  setCompleteOtp(otp) {
+    if (this.booking && otp) {
+      this.booking.completeOtp = String(otp).trim();
+      this.notify();
+    }
+  }
+
+  forceStart() {
+    if (!this.booking) return false;
+    this.booking.status = 'IN_PROGRESS';
+    this.booking.startedAt = this.booking.startedAt || new Date().toISOString();
+    this.booking.otpAttempts = 0;
+    this.startPoojaTimer();
+    this.notify();
+    return true;
+  }
+
+  forceComplete() {
+    if (!this.booking) return false;
+    clearInterval(this.timerInterval);
+    this.booking.status = 'COMPLETED';
+    this.booking.completedAt = this.booking.completedAt || new Date().toISOString();
+    this.notify();
+    return true;
+  }
+
   verifyStartOtp(enteredOtp) {
-    if (!this.booking || this.booking.status !== 'ARRIVED') {
-      return { success: false, message: 'कृपया पहले "पहुँच गया" स्थिति दर्ज करें।' };
+    if (!this.booking) {
+      return { success: false, message: 'कोई सक्रिय बुकिंग नहीं मिली।' };
+    }
+    if (!this.booking.startOtp) {
+      return { success: false, needsServer: true, message: 'कृपया सर्वर से Start OTP सत्यापित करें।' };
+    }
+    if (this.booking.status !== 'ARRIVED') {
+      this.booking.status = 'ARRIVED';
     }
 
     if (this.booking.otpAttempts >= 5) {
@@ -290,15 +329,10 @@ class PanditBookingStore {
       return { success: false, message: 'अधिक गलत OTP प्रयासों के कारण बुकिंग लॉक कर दी गई है।' };
     }
 
-    if (enteredOtp.trim() === this.booking.startOtp) {
-      this.booking.status = 'IN_PROGRESS';
-      this.booking.startedAt = new Date().toISOString();
-      this.booking.otpAttempts = 0;
-      this.startPoojaTimer();
-      this.notify();
-      return { success: true };
+    if (String(enteredOtp || '').trim() === String(this.booking.startOtp).trim()) {
+      return this.forceStart() ? { success: true } : { success: false };
     } else {
-      this.booking.otpAttempts += 1;
+      this.booking.otpAttempts = (this.booking.otpAttempts || 0) + 1;
       this.notify();
       return {
         success: false,
@@ -320,16 +354,15 @@ class PanditBookingStore {
   }
 
   verifyCompleteOtp(enteredOtp) {
-    if (!this.booking || this.booking.status !== 'IN_PROGRESS') {
-      return { success: false, message: 'पूजा अभी प्रगति में नहीं है।' };
+    if (!this.booking) {
+      return { success: false, message: 'कोई सक्रिय बुकिंग नहीं मिली।' };
+    }
+    if (!this.booking.completeOtp) {
+      return { success: false, needsServer: true, message: 'कृपया सर्वर से Complete OTP सत्यापित करें।' };
     }
 
-    if (enteredOtp.trim() === this.booking.completeOtp) {
-      clearInterval(this.timerInterval);
-      this.booking.status = 'COMPLETED';
-      this.booking.completedAt = new Date().toISOString();
-      this.notify();
-      return { success: true };
+    if (String(enteredOtp || '').trim() === String(this.booking.completeOtp).trim()) {
+      return this.forceComplete() ? { success: true } : { success: false };
     } else {
       return { success: false, message: 'गलत Complete OTP! कृपया यजमान की ऐप में देखें।' };
     }

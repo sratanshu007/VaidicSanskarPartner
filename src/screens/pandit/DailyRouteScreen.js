@@ -8,6 +8,8 @@ import {
   Modal,
   Alert,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -114,7 +116,11 @@ export default function DailyRouteScreen({ navigation }) {
             <View style={s.earningDivider} />
             <View style={s.earningCol}>
               <Text style={s.earningColLabel}>मासिक बोनस (≥95%)</Text>
-              <Text style={[s.earningColValue, { color: colors.success }]}>₹1,500 पात्र</Text>
+              <Text style={[s.earningColValue, { color: scorecard.monthlyBonusEligible ? colors.success : '#6A5B5C' }]}>
+                {scorecard.monthlyBonusEligible
+                  ? `₹${Number(scorecard.monthlyBonusAmount || 0).toLocaleString('en-IN')} पात्र`
+                  : '₹0'}
+              </Text>
             </View>
           </View>
         </View>
@@ -296,7 +302,7 @@ export default function DailyRouteScreen({ navigation }) {
 
       {/* Leave Request Modal */}
       <Modal visible={showLeaveModal} transparent animationType="slide">
-        <View style={s.modalOverlay}>
+        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={s.modalCard}>
             <View style={s.modalTop}>
               <Text style={s.modalTitle}>छुट्टी का आवेदन (Leave Request)</Text>
@@ -335,7 +341,7 @@ export default function DailyRouteScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

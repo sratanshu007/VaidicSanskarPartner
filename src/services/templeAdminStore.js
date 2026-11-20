@@ -56,41 +56,14 @@ export const DEFAULT_MANAGED_TEMPLE = {
     { id: 'sl5', time: '07:00 PM', capacity: 450, booked: 410, vipPrice: 351, vipQuota: 80, vipBooked: 76 },
   ],
   stats: {
-    todayDevotees: 1555,
-    todayVipPasses: 261,
-    todayDonation: 48250,
-    pendingSuggestions: 2,
+    todayDevotees: 0,
+    todayVipPasses: 0,
+    todayDonation: 0,
+    pendingSuggestions: 0,
   },
-  donationAccount: {
-    trustName: 'श्री काशी विश्वनाथ मंदिर न्यास परिषद',
-    bank: 'भारतीय स्टेट बैंक (SBI)',
-    accountNumber: '••••••••4819',
-    upiId: 'kashivishwanath@sbi',
-    isVerified: true,
-  },
-  poojas: [
-    { id: 'p1', title: 'श्री रुद्राभिषेक (Rudrabhishek)', dakshina: 1100, active: true },
-    { id: 'p2', title: 'महामृत्युंजय संपुट पाठ', dakshina: 2100, active: true },
-    { id: 'p3', title: 'सुगम दर्शन व विशेष अर्चन', dakshina: 501, active: true },
-  ],
-  suggestionsQueue: [
-    {
-      id: 'sug_1',
-      user: 'आलोक कुमार',
-      type: 'समय में संशोधन',
-      details: 'दोपहर में कपाट 11:30 से 12:30 बंद रहते हैं, कृपया समय सारिणी में स्पष्ट लिखें।',
-      date: 'आज, 10:15 AM',
-      status: 'pending',
-    },
-    {
-      id: 'sug_2',
-      user: 'सुनीता त्रिपाठी',
-      type: 'सुविधा अद्यतन',
-      details: 'गेट नंबर 4 पर नया व्हीलचेयर रैंप चालू हो गया है।',
-      date: 'कल, 04:30 PM',
-      status: 'pending',
-    },
-  ],
+  donationAccount: null,
+  poojas: [],
+  suggestionsQueue: [],
 };
 
 class TempleAdminStore {

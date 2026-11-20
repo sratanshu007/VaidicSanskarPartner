@@ -7,10 +7,10 @@
  */
 
 export const DEMO_CLIENT_KUNDALI = {
-  name: 'रमेश कुमार (यजमान)',
-  dob: '15 अगस्त 1994',
-  tob: '06:45 AM',
-  pob: 'लखनऊ, उत्तर प्रदेश',
+  name: 'यजमान (Customer)',
+  dob: '',
+  tob: '',
+  pob: '',
   lagna: 'सिंह (Leo)',
   rashi: 'वृश्चिक (Scorpio)',
   nakshatra: 'अनुराधा (चरण 2)',
@@ -31,8 +31,8 @@ export const DEMO_CLIENT_KUNDALI = {
 };
 
 export const DEMO_CLIENT_MATCHING = {
-  boyName: 'रमेश कुमार',
-  girlName: 'प्रिया शर्मा',
+  boyName: 'वर (Groom)',
+  girlName: 'वधू (Bride)',
   totalScore: 28.5,
   maxScore: 36,
   verdict: 'उत्तम विवाह योग (28.5 / 36 गुण)',

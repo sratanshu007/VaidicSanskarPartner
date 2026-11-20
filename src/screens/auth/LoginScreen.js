@@ -59,7 +59,7 @@ export default function LoginScreen({ navigation }) {
         setRole(resolvedRole);
         register({ ...v, role: resolvedRole }, res.token);
 
-        const partnerId = v.id || v._id || (resolvedRole === ROLES.ASTRO ? 'ASTRO-7890' : 'PND-VERIFIED');
+        const partnerId = String(v.id || v._id || v.phone || v.email || (resolvedRole === ROLES.ASTRO ? 'astro' : 'pandit'));
         socket.connect(res.token, partnerId);
         if (resolvedRole === ROLES.ASTRO || v.isAstroEnabled) {
           socket.emit('astro:online', {

@@ -30,89 +30,11 @@ export const MANDALI_OCCASIONS = [
   'मंदिर स्थापना व वार्षिक उत्सव',
 ];
 
-export const DEMO_MANDALIS = [
-  {
-    id: 'm1',
-    name: 'Shri Shyam Kripa Bhajan Mandali',
-    nameHi: 'श्री श्याम कृपा भजन मंडली',
-    leaderName: 'पं. सत्यनारायण मिश्रा',
-    city: 'वाराणसी, उत्तर प्रदेश',
-    serviceRadiusKm: 25,
-    membersCount: 7,
-    rating: 4.95,
-    reviewsCount: 148,
-    verified: true,
-    experienceYears: 12,
-    programsCompleted: 450,
-    styles: ['Shyam Bhajan', 'Bhajan Sandhya', 'Sunderkand Path'],
-    languages: ['हिंदी', 'भोजपुरी', 'राजस्थानी'],
-    instruments: ['हारमोनियम', 'ढोलक', 'तबला', 'मंजीरा', 'पैड / ऑक्टोपैड', 'साउंड सिस्टम'],
-    ownSoundSystem: true,
-    packages: [
-      {
-        id: 'pkg-1',
-        name: 'दिव्य भजन संध्या (3 घंटे)',
-        duration: '3 घंटे',
-        durationMin: 180,
-        members: 6,
-        price: 11000,
-        extraHourPrice: 2500,
-        includes: ['हाई-क्वालिटी साउंड सिस्टम (JBL)', '2 मुख्य गायक + 4 वाद्य वादक', 'हारमोनियम, ढोलक, पैड', 'माइक व मिक्सर सेट'],
-      },
-      {
-        id: 'pkg-2',
-        name: 'अखंड श्री सुंदरकांड पाठ व संकीर्तन',
-        duration: '4 घंटे',
-        durationMin: 240,
-        members: 7,
-        price: 14000,
-        extraHourPrice: 2500,
-        includes: ['व्यास पीठ साज-सज्जा', 'सम्पूर्ण वाद्य वृंद', 'साउंड सिस्टम', 'आरती व पुष्पांजलि'],
-      },
-    ],
-  },
-];
+export const DEMO_MANDALIS = [];
 
 class BhajanMandaliPartnerStore {
   constructor() {
-    this.booking = {
-      id: 'BM-98214',
-      mandali: DEMO_MANDALIS[0],
-      package: DEMO_MANDALIS[0].packages[0],
-      eventDate: '15 Oct 2026',
-      startTime: '06:00 PM',
-      duration: '3 घंटे',
-      durationMin: 180,
-      occasion: 'गृह प्रवेश व वास्तु शांति',
-      yajmanName: 'Yajman Ji',
-      yajmanPhone: '+91 •••••• ••10',
-      area: 'लाइव यजमान क्षेत्र (GPS)',
-      fullAddress: 'लाइव यजमान स्थान (GPS)',
-      expectedGuests: '75',
-      farmaishSongs: 'कीर्तन की है रात बाबा आज थाने आणो है, लल्ला की सुन के मैं आई',
-      specialNote: 'कृपया समय पर साउंड सेटअप कर लें। माता की चौकी हेतु पीला आसन उपलब्ध रहेगा।',
-      packagePrice: 11000,
-      netEarning: 9350, // 15% platform commission
-      travelFee: 0,
-      total: 11812,
-      advancePaid: 2362,
-      status: 'REQUESTED', // REQUESTED, ACCEPTED, ON_THE_WAY, ARRIVED, IN_PROGRESS, COMPLETED
-      expiresInHours: 23,
-      startOtp: '4821',
-      completeOtp: '8914',
-      elapsedSeconds: 0,
-      extraHours: 0,
-      extraHoursRequested: null,
-      chatMessages: [
-        {
-          id: 'm1',
-          sender: 'system',
-          text: 'यजमान के साथ आपकी बातचीत 100% सुरक्षित व एन्क्रिप्टेड है।',
-          time: '10:00 AM',
-        },
-      ],
-      review: null,
-    };
+    this.booking = null;
     this.listeners = new Set();
     this.timerInterval = null;
   }

@@ -32,21 +32,41 @@ export default function BookingDetailsScreen({ navigation, route }) {
     const found = (bookings || []).find(
       (b) => (b.id || b._id || b.bookingId) === bookingId
     );
-    return (
-      found ||
-      passedBooking || {
-        id: bookingId || 'VS-1042',
-        poojaName: 'Satyanarayan Puja',
-        date: '12 Oct 2025',
-        time: '10:00 AM',
-        amount: 2500,
-        status: 'confirmed',
-        customerName: 'Rahul Sharma',
-        customerPhone: '+91 98765 43210',
-        address: '101, Sunrise Apartment, Sector 12, New Delhi - 110001',
-      }
-    );
+    return found || passedBooking || null;
   }, [bookings, bookingId, passedBooking]);
+
+  const [otpModalVisible, setOtpModalVisible] = useState(false);
+  const [otpInput, setOtpInput] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  if (!booking) {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <Ionicons name="chevron-back" size={24} color="#4A0813" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Booking Details</Text>
+          <View style={styles.backBtn} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Ionicons name="calendar-outline" size={48} color="#C49A45" />
+          <Text style={{ fontSize: 16, fontWeight: '700', color: '#4A0813', marginTop: 12 }}>
+            बुकिंग उपलब्ध नहीं है / Booking Not Found
+          </Text>
+          <Text style={{ fontSize: 13, color: '#666', marginTop: 6, textAlign: 'center' }}>
+            यह बुकिंग या तो रद्द हो चुकी है अथवा सर्वर पर उपलब्ध नहीं है।
+          </Text>
+          <TouchableOpacity
+            style={{ marginTop: 20, backgroundColor: '#8B1A1A', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 }}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={{ color: '#fff', fontWeight: 'bold' }}>वापस जाएं / Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const statusRaw = String(booking.status || 'confirmed').toLowerCase();
   const isCompleted = statusRaw === 'completed' || statusRaw === 'done';
@@ -89,14 +109,10 @@ export default function BookingDetailsScreen({ navigation, route }) {
     booking.poojaName ||
     booking.serviceName ||
     booking.title ||
-    'Satyanarayan Pooja';
+    'Vedic Pooja';
   const displayDate = booking.scheduledDate || booking.date || 'Today';
-  const displayTime = booking.scheduledTime || booking.time || booking.slot || '10:00 AM';
-  const amount = Number(booking.totalAmount ?? booking.amount ?? booking.dakshina ?? booking.price ?? 2500);
-
-  const [otpModalVisible, setOtpModalVisible] = useState(false);
-  const [otpInput, setOtpInput] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const displayTime = booking.scheduledTime || booking.time || booking.slot || '';
+  const amount = Number(booking.totalAmount ?? booking.amount ?? booking.dakshina ?? booking.price ?? 0);
 
   const handleCallCustomer = () => {
     const cleanPhone = String(customerPhone).replace(/\s+/g, '');

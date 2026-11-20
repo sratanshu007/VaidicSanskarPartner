@@ -34,13 +34,6 @@ export default function HelpSupportScreen({ navigation }) {
       onPress: () => Linking.openURL('mailto:support@vaidicsanskar.com').catch(() => {}),
     },
     {
-      id: 'call',
-      title: 'Call Us',
-      subtitle: '+91 98765 43210',
-      icon: 'phone-outline',
-      onPress: () => Linking.openURL('tel:+919876543210').catch(() => {}),
-    },
-    {
       id: 'terms',
       title: 'Terms & Conditions',
       subtitle: 'Read our terms and conditions',

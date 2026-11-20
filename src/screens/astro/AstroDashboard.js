@@ -41,7 +41,7 @@ const ASTRO_SERVICES_LIST = [
 export default function AstroDashboard({ navigation }) {
   const { vendor, role, walletBalance, transactions, notifications, updateVendor } = usePartner();
   const isDirectAstro = isDirectAstroRole(role, vendor);
-  const partnerId = resolvePartnerId(vendor, isDirectAstro ? 'ASTRO-7890' : 'PND-VERIFIED');
+  const partnerId = resolvePartnerId(vendor);
 
   const [presence, setPresence] = useState(partnerAstroStore.getPresence());
   const [rates, setRates] = useState(partnerAstroStore.getRates());
@@ -187,17 +187,19 @@ export default function AstroDashboard({ navigation }) {
     const call = incomingCall;
     setIncomingCall(null);
 
+    const resolvedMode = String(call.mode || call.caller?.mode || 'audio').toLowerCase().trim() === 'video' ? 'video' : 'audio';
+
     // Socket signaling with real active partner metadata
     socket?.emit?.('astro:call:accept', {
       channelName: call.channelName || `vartalap_room_${Date.now()}`,
-      callerId: call.caller?.id || call.userId || 'U101',
+      callerId: call.caller?.id || call.userId || 'user',
       vendorId: partnerId,
       astrologer: {
         id: partnerId,
-        name: vendor?.name || 'आचार्य विद्याधर शास्त्री',
+        name: vendor?.name || 'आचार्य जी',
         title: isDirectAstro ? 'सत्यापित वैदिक ज्योतिषाचार्य' : 'सत्यापित वैदिक पंडित व ज्योतिषाचार्य',
       },
-      mode: call.mode || 'video',
+      mode: resolvedMode,
       agoraToken: call.agoraToken,
     });
 
@@ -206,23 +208,13 @@ export default function AstroDashboard({ navigation }) {
         id: call.channelName || `SES-${Date.now()}`,
         channelName: call.channelName || `vartalap_room_${Date.now()}`,
         userName: call.userName || call.caller?.name || 'यजमान',
-        userId: call.userId || call.caller?.id || 'U101',
+        userId: call.userId || call.caller?.id || 'user',
         mode: 'chat',
         rate: call.rate || rates.chat || 5,
         topic: call.topic || 'करियर व विवाह परामर्श',
-        birthDetails: call.birthDetails || {
-          dob: '14-08-1995',
-          tob: '07:30 AM',
-          pob: 'वाराणसी, उत्तर प्रदेश',
-          gender: 'पुरुष (Male)',
-          kundali: {
-            lagna: 'सिंह (Leo)',
-            rashi: 'वृश्चिक (Scorpio)',
-            nakshatra: 'अनुराधा (चरण 2)',
-          },
-        },
+        birthDetails: call.birthDetails || call.caller?.birthDetails || null,
         elapsedSeconds: 0,
-        netRatePerMinute: 4.25,
+        netRatePerMinute: Number(((call.rate || rates.chat || 5) * 0.85).toFixed(2)),
         chatMessages: [
           {
             id: `M-${Date.now()}`,
@@ -237,16 +229,17 @@ export default function AstroDashboard({ navigation }) {
       navigation.navigate('AstroSession');
     } else {
       navigation.navigate('InCall', {
+        mode: resolvedMode,
         caller: {
           name: call.userName || call.caller?.name || 'यजमान',
-          mode: call.mode || 'video',
-          rate: call.rate || rates[call.mode] || 5,
-          id: call.userId || call.caller?.id || 'U101',
+          mode: resolvedMode,
+          rate: call.rate || rates[resolvedMode] || rates.audio || 5,
+          id: call.userId || call.caller?.id || 'user',
           birthDetails: call.birthDetails || call.caller?.birthDetails,
           topic: call.topic || 'वैदिक ज्योतिष परामर्श',
           agoraToken: call.agoraToken,
         },
-        channelName: call.channelName || `vartalap_${call.mode || 'video'}_${Date.now().toString().slice(-6)}`,
+        channelName: call.channelName || `vartalap_${resolvedMode}_${Date.now().toString().slice(-6)}`,
         agoraToken: call.agoraToken,
         vendorId: partnerId,
         alreadyAccepted: true,
@@ -549,7 +542,7 @@ export default function AstroDashboard({ navigation }) {
                         id: item.sessionId || `SES-${Date.now()}`,
                         channelName: item.channelName || `vartalap_room_${Date.now()}`,
                         userName: item.userName,
-                        userId: item.userId || 'U101',
+                        userId: item.userId || 'user',
                         mode: 'chat',
                         rate: rates.chat || 5,
                         topic: item.topic || 'वैदिक परामर्श',
@@ -561,16 +554,18 @@ export default function AstroDashboard({ navigation }) {
                       partnerAstroStore.notify();
                       navigation.navigate('AstroSession');
                     } else {
+                      const resolvedMode = String(item.mode || 'audio').toLowerCase().trim() === 'video' ? 'video' : 'audio';
                       navigation.navigate('InCall', {
+                        mode: resolvedMode,
                         caller: {
                           name: item.userName,
-                          mode: item.mode || 'video',
-                          rate: rates[item.mode] || 5,
-                          id: item.userId || 'U101',
+                          mode: resolvedMode,
+                          rate: rates[resolvedMode] || rates.audio || 5,
+                          id: item.userId || 'user',
                           birthDetails: item.birthDetails,
                           topic: item.topic,
                         },
-                        channelName: item.channelName || `vartalap_${item.mode || 'video'}_${Date.now().toString().slice(-6)}`,
+                        channelName: item.channelName || `vartalap_${resolvedMode}_${Date.now().toString().slice(-6)}`,
                       });
                     }
                   }}

@@ -101,7 +101,7 @@ export default function AcceptPoojaScreen({ navigation, route }) {
 
   const handleAccept = async () => {
     const partnerData = {
-      id: vendor?.id || vendor?._id || 'PND-VERIFIED',
+      id: vendor?.id || vendor?._id || 'partner',
       name: vendor?.name || 'पंडित जी',
       phone: vendor?.phone || '',
       photo: vendor?.photo || null,

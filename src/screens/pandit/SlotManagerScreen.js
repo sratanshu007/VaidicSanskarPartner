@@ -77,18 +77,8 @@ export default function SlotManagerScreen({ navigation }) {
     const active = list.filter(
       (b) => String(b.status || '').toLowerCase() !== 'cancelled'
     );
-    if (active.length > 0) return active.slice(0, 4);
-    return [
-      {
-        id: 'cal-sample-1',
-        poojaName: 'Satyanarayan Puja',
-        time: '10:00 AM',
-        date: `${selectedDay} ${MONTHS[viewMonth].slice(0, 3)} ${viewYear}`,
-        amount: 2500,
-        status: 'confirmed',
-      },
-    ];
-  }, [bookings, selectedDay, viewMonth, viewYear]);
+    return active.slice(0, 4);
+  }, [bookings]);
 
   const selectedWeekdayIndex = new Date(viewYear, viewMonth, selectedDay).getDay();
   const weekdayKey = SHORT_DAYS[(selectedWeekdayIndex + 6) % 7];
@@ -163,37 +153,45 @@ export default function SlotManagerScreen({ navigation }) {
         <View style={styles.bookingsHeadRow}>
           <Text style={styles.sectionTitle}>Today's Bookings</Text>
           <Text style={styles.countText}>
-            {bookingsList.length} Booking{bookingsList.length > 1 ? 's' : ''}
+            {bookingsList.length} Booking{bookingsList.length !== 1 ? 's' : ''}
           </Text>
         </View>
 
-        {bookingsList.map((b, idx) => {
-          const id = b.id || b._id || b.bookingId || `b-${idx}`;
-          return (
-            <View key={id} style={[styles.bookingCard, shadow]}>
-              <Image
-                source={require('../../../assets/banner_havan_kund.png')}
-                style={styles.bookingAvatar}
-                resizeMode="cover"
-              />
-              <View style={styles.bookingInfo}>
-                <Text style={styles.bookingTitle} numberOfLines={1}>
-                  {b.poojaName || b.serviceName || b.title || 'Satyanarayan Puja'}
-                </Text>
-                <Text style={styles.bookingTime}>{b.time || b.slot || '10:00 AM'}</Text>
+        {bookingsList.length === 0 ? (
+          <View style={[styles.bookingCard, shadow, { paddingVertical: 18, justifyContent: 'center', alignItems: 'center' }]}>
+            <Text style={{ fontSize: 13.5, color: '#7A6257', fontWeight: '500' }}>
+              इस तिथि पर कोई निर्धारित बुकिंग नहीं है (No bookings)
+            </Text>
+          </View>
+        ) : (
+          bookingsList.map((b, idx) => {
+            const id = b.id || b._id || b.bookingId || `b-${idx}`;
+            return (
+              <View key={id} style={[styles.bookingCard, shadow]}>
+                <Image
+                  source={require('../../../assets/banner_havan_kund.png')}
+                  style={styles.bookingAvatar}
+                  resizeMode="cover"
+                />
+                <View style={styles.bookingInfo}>
+                  <Text style={styles.bookingTitle} numberOfLines={1}>
+                    {b.poojaName || b.serviceName || b.title || 'Vedic Pooja'}
+                  </Text>
+                  <Text style={styles.bookingTime}>{b.time || b.slot || ''}</Text>
+                </View>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.viewBtn}
+                  onPress={() =>
+                    navigation.navigate('BookingDetails', { bookingId: id, booking: b })
+                  }
+                >
+                  <Text style={styles.viewBtnText}>View</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                style={styles.viewBtn}
-                onPress={() =>
-                  navigation.navigate('BookingDetails', { bookingId: id, booking: b })
-                }
-              >
-                <Text style={styles.viewBtnText}>View</Text>
-              </TouchableOpacity>
-            </View>
-          );
-        })}
+            );
+          })
+        )}
 
         {/* Expandable Time Slot Availability Controls */}
         <TouchableOpacity

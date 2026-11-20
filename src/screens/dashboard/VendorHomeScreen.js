@@ -90,7 +90,7 @@ export default function VendorHomeScreen({ navigation }) {
   useEffect(() => {
     const token = vendor?.token || getAuthToken?.();
     socket?.connect?.(token);
-    const partnerId = VendorAstroHelper.resolvePartnerId(vendor, 'PND-VERIFIED');
+    const partnerId = VendorAstroHelper.resolvePartnerId(vendor);
     socket?.emit?.('pandit:join', { vendorId: partnerId });
     socket?.emit?.('vendor:join', { vendorId: partnerId });
     if (vendor?.isAstroEnabled) {
@@ -112,6 +112,23 @@ export default function VendorHomeScreen({ navigation }) {
       setIncomingJob((prev) => ((prev?.id || prev?.bookingId) === bookingId ? null : prev));
     });
 
+    const onJobCancelled = (data) => {
+      const cancelId = data?.bookingId || data?.id || data?.job_id;
+      setIncomingJob((prev) => {
+        if (!cancelId) return null;
+        return ((prev?.id || prev?.bookingId) === cancelId ? null : prev);
+      });
+      setActiveBooking((prev) => {
+        if (!cancelId) return null;
+        return ((prev?.id || prev?.bookingId) === cancelId ? null : prev);
+      });
+    };
+
+    const unsubC1 = socket?.on?.('booking:cancelled', onJobCancelled);
+    const unsubC2 = socket?.on?.('booking:cancel', onJobCancelled);
+    const unsubC3 = socket?.on?.('job:cancel', onJobCancelled);
+    const unsubC4 = socket?.on?.('instant:cancel', onJobCancelled);
+
     const unsubCall = socket?.on?.('astro:call:incoming', (callData) => {
       if (callData) setIncomingCall(callData);
     });
@@ -121,7 +138,7 @@ export default function VendorHomeScreen({ navigation }) {
     });
 
     return () => {
-      [unsubReq, unsubBrd, unsubJob, unsubInst, unsubInstNew, unsubOffer, unsubTaken, unsubCall, unsubCallEnd].forEach((fn) => {
+      [unsubReq, unsubBrd, unsubJob, unsubInst, unsubInstNew, unsubOffer, unsubTaken, unsubC1, unsubC2, unsubC3, unsubC4, unsubCall, unsubCallEnd].forEach((fn) => {
         if (typeof fn === 'function') fn();
       });
     };
@@ -132,11 +149,14 @@ export default function VendorHomeScreen({ navigation }) {
     const call = incomingCall;
     setIncomingCall(null);
 
+    const resolvedMode = String(call.mode || call.caller?.mode || 'audio').toLowerCase().trim() === 'video' ? 'video' : 'audio';
+
     socket.emit('astro:call:accept', {
       channelName: call.channelName,
-      callerId: call.caller?.id || 'U101',
-      vendorId: vendor?.id || 'V4569',
-      mode: call.mode || 'video',
+      callerId: call.caller?.id || call.userId || 'user',
+      vendorId: vendor?.id || vendor?._id || 'partner',
+      mode: resolvedMode,
+      agoraToken: call.agoraToken,
     });
 
     if (call.mode === 'chat') {
@@ -144,21 +164,11 @@ export default function VendorHomeScreen({ navigation }) {
         id: call.channelName || `SES-${Date.now()}`,
         channelName: call.channelName,
         userName: call.caller?.name || 'यजमान (Customer)',
-        userId: call.caller?.id || 'U101',
+        userId: call.caller?.id || call.userId || 'user',
         mode: 'chat',
         rate: call.rate || 15,
         topic: call.topic || 'करियर व जीवन परामर्श',
-        birthDetails: call.caller?.birthDetails || {
-          dob: '15-08-1994',
-          tob: '06:45 AM',
-          pob: 'लखनऊ, उत्तर प्रदेश',
-          gender: 'पुरुष (Male)',
-          kundali: {
-            lagna: 'सिंह (Leo)',
-            rashi: 'वृश्चिक (Scorpio)',
-            nakshatra: 'अनुराधा (चरण 2)',
-          },
-        },
+        birthDetails: call.caller?.birthDetails || null,
         elapsedSeconds: 0,
         netRatePerMinute: call.rate || 5,
         chatMessages: [
@@ -175,17 +185,18 @@ export default function VendorHomeScreen({ navigation }) {
       navigation.navigate('AstroSession');
     } else {
       navigation.navigate('InCall', {
+        mode: resolvedMode,
         caller: {
           ...(call.caller || {}),
           name: call.userName || call.caller?.name || 'Customer / Devotee',
-          mode: call.mode || 'video',
+          mode: resolvedMode,
           rate: call.rate || 5,
-          id: call.caller?.id || call.userId || 'U101',
+          id: call.caller?.id || call.userId || 'user',
           agoraToken: call.agoraToken,
         },
         channelName: call.channelName,
         agoraToken: call.agoraToken,
-        vendorId: vendor?.id || 'V4569',
+        vendorId: vendor?.id || vendor?._id || 'partner',
         alreadyAccepted: true,
       });
     }
@@ -208,7 +219,7 @@ export default function VendorHomeScreen({ navigation }) {
 
     const bId = currentJob.id || currentJob.bookingId || currentJob.requestId || 'BK' + Date.now();
     const pData = {
-      id: vendor?.id || vendor?._id || 'PND-VERIFIED',
+      id: vendor?.id || vendor?._id || 'partner',
       name: vendor?.name || 'पंडित जी',
       phone: vendor?.phone || '',
       photo: vendor?.photo || null,
@@ -237,6 +248,7 @@ export default function VendorHomeScreen({ navigation }) {
       status: 'ACCEPTED',
       assignedVendor: pData,
       vendor: pData,
+      booking: acceptedBooking,
     });
     socket.emit('instant:update', {
       id: bId,
@@ -244,6 +256,7 @@ export default function VendorHomeScreen({ navigation }) {
       status: 'ACCEPTED',
       assignedVendor: pData,
       vendor: pData,
+      booking: acceptedBooking,
     });
 
     try {

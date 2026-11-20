@@ -84,7 +84,11 @@ class PartnerSocket {
         'tracking:update',
         'booking:location',
         'booking:cancelled',
+        'booking:cancel',
+        'instant:cancel',
+        'job:cancel',
         'chat:message',
+        'booking:chat',
         'order:new',
         'inquiry:new',
         'vendor:update',
@@ -199,6 +203,23 @@ class PartnerSocket {
 
   send(event, data) {
     this.emit(event, data);
+  }
+
+  join(bookingId) {
+    if (bookingId) {
+      const bStr = String(bookingId);
+      this.emit('subscribe:booking', { bookingId: bStr });
+      this.emit('booking:join', { bookingId: bStr });
+      this.emit('join:room', { room: bStr, bookingId: bStr });
+    }
+  }
+
+  leave(bookingId) {
+    if (bookingId) {
+      const bStr = String(bookingId);
+      this.emit('booking:leave', { bookingId: bStr });
+      this.emit('leave:room', { room: bStr, bookingId: bStr });
+    }
   }
 
   disconnect() {

@@ -99,20 +99,7 @@ export const POOJA_TYPES = [
   },
 ];
 
-export const DEMO_PANDIT = {
-  id: 'PND-VERIFIED',
-  name: 'Verified Pandit',
-  photo: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=256',
-  rating: 4.9,
-  ratingCount: 142,
-  expYears: 14,
-  languages: ['Hindi', 'Sanskrit', 'Bhojpuri'],
-  verified: true,
-  gurukul: 'Sampurnanand Sanskrit Vishwavidyalaya, Varanasi',
-  phoneMasked: '+91 •••••• ••84',
-  distanceKm: 2.3,
-  etaMin: 18,
-};
+export const DEMO_PANDIT = null;
 
 class PanditBookingStore {
   constructor() {
@@ -228,7 +215,7 @@ class PanditBookingStore {
     clearTimeout(this.dispatchTimeout);
 
     this.booking.status = 'ACCEPTED';
-    this.booking.pandit = { ...pandit };
+    this.booking.pandit = pandit ? { ...pandit } : null;
     this.booking.acceptedAt = new Date().toISOString();
 
     this.booking.chatMessages.push({

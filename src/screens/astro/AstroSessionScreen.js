@@ -22,7 +22,7 @@ import { useKeyboardLift } from '../../utils/useKeyboardLift';
 
 export default function AstroSessionScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { addEarning } = usePartner();
+  const { addEarning, vendor } = usePartner();
   const [session, setSession] = useState(partnerAstroStore.getActiveSession());
   const [activeTab, setActiveTab] = useState('session'); // session | kundali | notes
   const [elapsed, setElapsed] = useState(0);
@@ -93,7 +93,7 @@ export default function AstroSessionScreen({ navigation }) {
       text: msg,
       sender: 'astrologer',
       senderName: 'ज्योतिषाचार्य (Astrologer)',
-      recipientId: session?.userId || 'U101',
+      recipientId: session?.userId || 'user',
       sessionId: session?.id,
       channelName: session?.channelName,
     });
@@ -118,8 +118,8 @@ export default function AstroSessionScreen({ navigation }) {
             clearInterval(timerRef.current);
             socket.emit('astro:call:end', {
               channelName: session?.channelName || `vartalap_room_${session?.id || 'session'}`,
-              callerId: session?.userId || 'U101',
-              recipientId: 'V4569',
+              callerId: session?.userId || 'user',
+              recipientId: vendor?.id || vendor?._id || 'partner',
             });
             partnerAstroStore.endSession();
             if (typeof addEarning === 'function') {
@@ -268,6 +268,8 @@ export default function AstroSessionScreen({ navigation }) {
                 <AgoraCallView
                   channelName={session.channelName || `vartalap_room_${session.id || 'astro'}`}
                   mode={session.mode === 'video' ? 'video' : 'audio'}
+                  token={session.agoraToken || route.params?.agoraToken}
+                  uid={20001}
                   isMuted={isMuted}
                   isSpeaker={isSpeaker}
                   isVideoCamOff={isVideoCamOff}

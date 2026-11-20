@@ -46,9 +46,12 @@ const NINE_GRAHAS = [
 
 export default function InCallScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
+  const incomingMode = String(route.params?.mode || route.params?.caller?.mode || '').toLowerCase().trim();
+  const isVideoMode = incomingMode === 'video';
+  const resolvedMode = isVideoMode ? 'video' : 'audio';
   const caller = route.params?.caller || {
     name: 'यजमान',
-    mode: 'video',
+    mode: resolvedMode,
     rate: 5,
     topic: 'विवाह व मांगलिक विचार',
     birthDetails: {
@@ -66,8 +69,6 @@ export default function InCallScreen({ navigation, route }) {
       },
     },
   };
-
-  const isVideoMode = (caller.mode || 'video') === 'video';
   const channelName = useRef(route.params?.channelName || `vartalap_room_${Date.now().toString().slice(-6)}`).current;
   const { addEarning } = usePartner();
   const sec = useElapsed(true);
@@ -77,6 +78,7 @@ export default function InCallScreen({ navigation, route }) {
   const [isSpeaker, setIsSpeaker] = useState(true);
   const [isVideoCamOff, setIsVideoCamOff] = useState(!isVideoMode);
   const [isFrontCam, setIsFrontCam] = useState(true);
+  const [liveAgoraToken, setLiveAgoraToken] = useState(route.params?.agoraToken || caller?.agoraToken || null);
 
   // Sheets and tabs
   const [showKundaliSheet, setShowKundaliSheet] = useState(false);
@@ -133,9 +135,9 @@ export default function InCallScreen({ navigation, route }) {
     if (!route.params?.alreadyAccepted) {
       socket.emit('astro:call:accept', {
         channelName,
-        callerId: caller.id || 'U101',
-        vendorId: route.params?.vendorId || 'ASTRO-7890',
-        mode: caller.mode || 'video',
+        callerId: caller.id || caller.userId || 'user',
+        vendorId: route.params?.vendorId || 'partner',
+        mode: isVideoMode ? 'video' : 'audio',
         agoraToken: route.params?.agoraToken || caller?.agoraToken,
       });
     }
@@ -144,11 +146,20 @@ export default function InCallScreen({ navigation, route }) {
       end(false);
     };
 
+    const handleConnected = (payload) => {
+      if (payload?.agoraToken) {
+        setLiveAgoraToken(payload.agoraToken);
+      }
+    };
+
     const unsubEnded = socket.on('astro:call:ended', handleRemoteEnd);
+    const unsubConn = socket.on('astro:call:connected', handleConnected);
 
     return () => {
       if (typeof unsubEnded === 'function') unsubEnded();
       else socket.off?.('astro:call:ended', handleRemoteEnd);
+      if (typeof unsubConn === 'function') unsubConn();
+      else socket.off?.('astro:call:connected', handleConnected);
     };
   }, []);
 
@@ -156,13 +167,13 @@ export default function InCallScreen({ navigation, route }) {
     if (notifyRemote) {
       socket.emit('astro:call:end', {
         channelName,
-        recipientId: caller.id || 'U101',
+        recipientId: caller.id || caller.userId || 'user',
       });
     }
 
     const netAmount = Math.max(1, Math.round(net));
     if (typeof addEarning === 'function') {
-      addEarning(netAmount, `ज्योतिष परामर्श ${caller.mode === 'video' ? 'वीडियो' : 'ऑडियो'} (${mins} min)`);
+      addEarning(netAmount, `ज्योतिष परामर्श ${isVideoMode ? 'वीडियो' : 'ऑडियो'} (${mins} min)`);
     }
 
     setCompletedSummary({
@@ -170,7 +181,7 @@ export default function InCallScreen({ navigation, route }) {
       gross,
       net: netAmount,
       devoteeName: caller.name,
-      mode: caller.mode,
+      mode: isVideoMode ? 'video' : 'audio',
     });
     setShowSummaryModal(true);
   };
@@ -256,7 +267,8 @@ export default function InCallScreen({ navigation, route }) {
           <AgoraCallView
             channelName={channelName}
             mode="video"
-            token={route.params?.agoraToken || caller?.agoraToken}
+            token={liveAgoraToken}
+            uid={20001}
             isMuted={isMuted}
             isSpeaker={isSpeaker}
             isVideoCamOff={isVideoCamOff}
@@ -271,7 +283,8 @@ export default function InCallScreen({ navigation, route }) {
             <AgoraCallView
               channelName={channelName}
               mode="audio"
-              token={route.params?.agoraToken || caller?.agoraToken}
+              token={liveAgoraToken}
+              uid={20001}
               isMuted={isMuted}
               isSpeaker={isSpeaker}
               isVideoCamOff={true}

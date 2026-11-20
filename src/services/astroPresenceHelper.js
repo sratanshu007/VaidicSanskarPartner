@@ -4,8 +4,8 @@ import partnerAstroStore from './talkToAstroStore';
 /**
  * Resolves the canonical partner ID used across socket rooms and astro listings.
  */
-export function resolvePartnerId(vendor, fallback = 'ASTRO-7890') {
-  return String(vendor?.id || vendor?._id || fallback);
+export function resolvePartnerId(vendor, fallback = '') {
+  return String(vendor?.id || vendor?._id || vendor?.phone || vendor?.email || fallback || 'partner');
 }
 
 /**
@@ -26,7 +26,7 @@ export function isAstroModeActive(role, vendor) {
  * Broadcasts online presence to the backend so devotees can reach the partner.
  */
 export function broadcastAstroOnline(vendor, presenceOverride, ratesOverride) {
-  const defaultId = vendor?.role === 'pandit' ? 'PND-VERIFIED' : 'ASTRO-7890';
+  const defaultId = vendor?.role === 'pandit' ? (vendor?.id || 'pandit') : (vendor?.id || 'astro');
   const partnerId = resolvePartnerId(vendor, defaultId);
   const presence = presenceOverride || partnerAstroStore.getPresence();
   const rates = ratesOverride || partnerAstroStore.getRates();
@@ -73,7 +73,7 @@ export function broadcastAstroOnline(vendor, presenceOverride, ratesOverride) {
  * Marks the partner offline as an astrologer without dropping Pandit availability.
  */
 export function broadcastAstroOffline(vendor) {
-  const defaultId = vendor?.role === 'pandit' ? 'PND-VERIFIED' : 'ASTRO-7890';
+  const defaultId = vendor?.role === 'pandit' ? (vendor?.id || 'pandit') : (vendor?.id || 'astro');
   const partnerId = resolvePartnerId(vendor, defaultId);
   socket?.emit?.('astro:offline', { id: partnerId, vendorId: partnerId });
   socket?.emit?.('astro:presence', { id: partnerId, vendorId: partnerId, isOnline: false });

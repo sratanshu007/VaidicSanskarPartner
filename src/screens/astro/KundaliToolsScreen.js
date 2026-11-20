@@ -19,10 +19,10 @@ export default function KundaliToolsScreen({ navigation }) {
   const [toolMode, setToolMode] = useState('kundali'); // 'kundali' | 'matching'
 
   // Input states
-  const [clientName, setClientName] = useState('रमेश कुमार');
-  const [clientDob, setClientDob] = useState('15/08/1994');
-  const [clientTob, setClientTob] = useState('06:45 AM');
-  const [clientPob, setClientPob] = useState('लखनऊ, उत्तर प्रदेश');
+  const [clientName, setClientName] = useState('');
+  const [clientDob, setClientDob] = useState('');
+  const [clientTob, setClientTob] = useState('');
+  const [clientPob, setClientPob] = useState('');
 
   const clientChart = partnerKundaliStore.getClientKundali();
   const matchingData = partnerKundaliStore.getMatching();

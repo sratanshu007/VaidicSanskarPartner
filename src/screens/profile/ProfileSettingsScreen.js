@@ -69,7 +69,7 @@ export default function ProfileSettingsScreen({ navigation }) {
     },
   ];
 
-  const displayId = vendor?.id || vendor?._id || 'VS102456';
+  const displayId = vendor?.partnerId || vendor?.id || vendor?._id || vendor?.phone || 'Partner';
 
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom', 'left', 'right']}>

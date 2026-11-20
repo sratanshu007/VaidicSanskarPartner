@@ -190,8 +190,8 @@ export const NotificationProvider = ({ children }) => {
 
     const handleBookingCancelled = () => {
       showNotification({
-        title: '⚠️ पूजा रद्द की गई',
-        message: 'यजमान द्वारा यह पूजा अनुरोध रद्द कर दिया गया है।',
+        title: '⚠️ पूजा रद्द (Cancelled)',
+        message: 'यजमान द्वारा यह पूजा बुकिंग रद्द कर दी गई है।',
         type: 'alert',
       });
     };
@@ -209,6 +209,9 @@ export const NotificationProvider = ({ children }) => {
     socket.on('job:new', handleNewJob);
     socket.on('instant:request', handleNewJob);
     socket.on('booking:cancelled', handleBookingCancelled);
+    socket.on('booking:cancel', handleBookingCancelled);
+    socket.on('job:cancel', handleBookingCancelled);
+    socket.on('instant:cancel', handleBookingCancelled);
     socket.on('kyc:approved', handleKycApproved);
 
     return () => {
@@ -217,6 +220,9 @@ export const NotificationProvider = ({ children }) => {
       socket.off('job:new', handleNewJob);
       socket.off('instant:request', handleNewJob);
       socket.off('booking:cancelled', handleBookingCancelled);
+      socket.off('booking:cancel', handleBookingCancelled);
+      socket.off('job:cancel', handleBookingCancelled);
+      socket.off('instant:cancel', handleBookingCancelled);
       socket.off('kyc:approved', handleKycApproved);
     };
   }, [showNotification]);

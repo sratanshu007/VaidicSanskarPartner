@@ -85,8 +85,8 @@ export default function AstrologyServicesScreen({ navigation }) {
     const activeRates = newRates || rates;
     const isAnyOnline = Boolean(activePres?.chatOnline || activePres?.audioOnline || activePres?.videoOnline);
     const payload = {
-      id: vendor?.id || vendor?._id || 'V4569',
-      vendorId: vendor?.id || vendor?._id || 'V4569',
+      id: vendor?.id || vendor?._id || 'partner',
+      vendorId: vendor?.id || vendor?._id || 'partner',
       name: vendor?.name || 'पंडित जी (Live Partner)',
       nameHi: vendor?.name || 'पंडित जी (Live Partner)',
       title: 'सत्यापित वैदिक ज्योतिषी • लाइव पार्टनर',
@@ -140,12 +140,15 @@ export default function AstrologyServicesScreen({ navigation }) {
     const call = incomingCall;
     setIncomingCall(null);
 
+    const resolvedMode = String(call.mode || call.caller?.mode || 'audio').toLowerCase().trim() === 'video' ? 'video' : 'audio';
+
     // Accept via Socket signaling
     socket.emit('astro:call:accept', {
       channelName: call.channelName,
-      callerId: call.caller?.id || 'U101',
-      vendorId: vendor?.id || 'V4569',
-      mode: call.mode || 'video',
+      callerId: call.caller?.id || call.userId || 'user',
+      vendorId: vendor?.id || vendor?._id || 'partner',
+      mode: resolvedMode,
+      agoraToken: call.agoraToken,
     });
 
     if (call.mode === 'chat') {
@@ -153,13 +156,13 @@ export default function AstrologyServicesScreen({ navigation }) {
         id: call.channelName || `SES-${Date.now()}`,
         channelName: call.channelName,
         userName: call.caller?.name || 'यजमान (Customer)',
-        userId: call.caller?.id || 'U101',
+        userId: call.caller?.id || call.userId || 'user',
         mode: 'chat',
         rate: call.rate || 5,
-        topic: 'परामर्श',
-        birthDetails: { name: call.caller?.name || 'यजमान' },
+        topic: call.topic || 'परामर्श',
+        birthDetails: call.caller?.birthDetails || null,
         elapsedSeconds: 0,
-        netRatePerMinute: 4.25,
+        netRatePerMinute: Math.round((call.rate || 5) * 0.85),
         chatMessages: [
           {
             id: `M-${Date.now()}`,
@@ -174,17 +177,18 @@ export default function AstrologyServicesScreen({ navigation }) {
       navigation.navigate('AstroSession');
     } else {
       navigation.navigate('InCall', {
+        mode: resolvedMode,
         caller: {
           ...(call.caller || {}),
           name: call.userName || call.caller?.name || 'Customer / Devotee',
-          mode: call.mode || 'video',
+          mode: resolvedMode,
           rate: call.rate || 5,
-          id: call.caller?.id || call.userId || 'U101',
+          id: call.caller?.id || call.userId || 'user',
           agoraToken: call.agoraToken,
         },
         channelName: call.channelName,
         agoraToken: call.agoraToken,
-        vendorId: vendor?.id || 'V4569',
+        vendorId: vendor?.id || vendor?._id || 'partner',
         alreadyAccepted: true,
       });
     }
@@ -401,39 +405,15 @@ export default function AstrologyServicesScreen({ navigation }) {
                 style={s.actionCard}
                 activeOpacity={0.88}
                 onPress={() => {
-                  partnerAstroStore.activeSession = {
-                    id: `SES-LIVE-${Date.now()}`,
-                    channelName: 'vartalap_room_demo',
-                    userName: 'रमेश कुमार (यजमान)',
-                    userId: 'U101',
-                    mode: 'chat',
-                    rate: rates.chat || 5,
-                    topic: 'करियर व नौकरी (Career & Job)',
-                    birthDetails: {
-                      dob: '15-08-1994',
-                      tob: '06:45 AM',
-                      pob: 'लखनऊ, उत्तर प्रदेश',
-                      gender: 'पुरुष (Male)',
-                      kundali: {
-                        lagna: 'सिंह (Leo)',
-                        rashi: 'वृश्चिक (Scorpio)',
-                        nakshatra: 'अनुराधा (चरण 2)',
-                      },
-                    },
-                    elapsedSeconds: 0,
-                    netRatePerMinute: Math.round((rates.chat || 5) * 0.85),
-                    chatMessages: [
-                      {
-                        id: `M-${Date.now()}`,
-                        sender: 'client',
-                        text: 'प्रणाम गुरुजी! मेरी कुंडली देखकर बताएं कि मेरी नौकरी में पदोन्नति का योग कब बन रहा है?',
-                        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                      },
-                    ],
-                    privateNotes: '',
-                  };
-                  partnerAstroStore.notify();
-                  navigation.navigate('AstroSession');
+                  const active = partnerAstroStore.getActiveSession();
+                  if (active) {
+                    navigation.navigate('AstroSession');
+                  } else {
+                    Alert.alert(
+                      'लाइव चैट कंसोल',
+                      'वर्तमान में कोई सक्रिय चैट परामर्श नहीं है। यजमान द्वारा अनुरोध आने पर सत्र स्वतः प्रारंभ होगा।'
+                    );
+                  }
                 }}
               >
                 <View style={[s.actionIconDisc, { backgroundColor: '#EDE7F6' }]}>
@@ -446,39 +426,18 @@ export default function AstrologyServicesScreen({ navigation }) {
                 <MaterialCommunityIcons name="chevron-right" size={24} color="#A08E90" />
               </TouchableOpacity>
 
-              {/* Action 2: Start / Test Agora Video & Audio Call */}
-              <TouchableOpacity
-                style={s.actionCard}
-                activeOpacity={0.88}
-                onPress={() => {
-                  navigation.navigate('InCall', {
-                    caller: { name: 'यजमान (Customer)', mode: 'video', rate: rates.video || 5, id: 'U101' },
-                    channelName: 'vartalap_room_demo',
-                  });
-                }}
-              >
-                <View style={[s.actionIconDisc, { backgroundColor: '#E0F2F1' }]}>
-                  <MaterialCommunityIcons name="video" size={26} color="#00897B" />
-                </View>
-                <View style={{ flex: 1, marginLeft: 14 }}>
-                  <Text style={s.actionTitle}>अगोरा वीडियो व ऑडियो कॉल स्टेज</Text>
-                  <Text style={s.actionSub}>लाइव HD कैमरा, म्यूट/स्पीकर एवं मानदेय मीटर</Text>
-                </View>
-                <MaterialCommunityIcons name="chevron-right" size={24} color="#A08E90" />
-              </TouchableOpacity>
-
-              {/* Action 3: Kundali Tools */}
+              {/* Action 2: Kundali Tools */}
               <TouchableOpacity
                 style={s.actionCard}
                 activeOpacity={0.88}
                 onPress={() => navigation.navigate('KundaliTools')}
               >
                 <View style={[s.actionIconDisc, { backgroundColor: '#FFF3E0' }]}>
-                  <MaterialCommunityIcons name="om" size={26} color="#E65100" />
+                  <MaterialCommunityIcons name="compass-outline" size={26} color="#E65100" />
                 </View>
                 <View style={{ flex: 1, marginLeft: 14 }}>
-                  <Text style={s.actionTitle}>वैदिक कुंडली व पंचांग टूल्स</Text>
-                  <Text style={s.actionSub}>ग्रह स्थिति, दशा, अष्टकवर्ग व लग्न गणना</Text>
+                  <Text style={s.actionTitle}>वैदिक कुण्डली एवं पंचांग टूल्स</Text>
+                  <Text style={s.actionSub}>ग्रह स्थिति, दशा, दोष विश्लेषण एवं अष्टकूट मिलान</Text>
                 </View>
                 <MaterialCommunityIcons name="chevron-right" size={24} color="#A08E90" />
               </TouchableOpacity>

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -42,6 +42,54 @@ export default function StartOtpScreen({ navigation, route }) {
   const bId = booking?.id || booking?.bookingId || 'BK' + Date.now();
   const poojaName = booking?.pooja?.name || booking?.name || 'वैदिक पूजा';
   const yajmanName = booking?.yajmanName || 'यजमान';
+
+  // Reactive cancellation listener: automatically handles Yajman cancelling booking
+  useEffect(() => {
+    socket?.join?.(bId);
+
+    const handleCancelled = (data) => {
+      const cancelId = data?.bookingId || data?.id;
+      if (cancelId && bId && String(cancelId) !== String(bId)) {
+        return; // Event for a different booking
+      }
+
+      panditBookingStore.reset();
+
+      Alert.alert(
+        '⚠️ पूजा रद्द (Cancelled)',
+        'यजमान द्वारा यह पूजा बुकिंग रद्द कर दी गई है।',
+        [
+          {
+            text: 'होम पर जाएं',
+            onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Main' }] }),
+          },
+        ],
+        { cancelable: false }
+      );
+
+      setTimeout(() => {
+        navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      }, 2000);
+    };
+
+    const unsubC1 = socket?.on?.('booking:cancelled', handleCancelled);
+    const unsubC2 = socket?.on?.('booking:cancel', handleCancelled);
+    const unsubC3 = socket?.on?.('job:cancel', handleCancelled);
+    const unsubC4 = socket?.on?.('instant:cancel', handleCancelled);
+    const unsubC5 = socket?.on?.('instant:update', (data) => {
+      if (data && String(data.status).toUpperCase() === 'CANCELLED') {
+        handleCancelled(data);
+      }
+    });
+
+    return () => {
+      if (typeof unsubC1 === 'function') unsubC1();
+      if (typeof unsubC2 === 'function') unsubC2();
+      if (typeof unsubC3 === 'function') unsubC3();
+      if (typeof unsubC4 === 'function') unsubC4();
+      if (typeof unsubC5 === 'function') unsubC5();
+    };
+  }, [bId, navigation]);
 
   const handleOtpChange = (val, idx) => {
     const updated = [...otp];

@@ -91,7 +91,9 @@ export default function IncomingRequestModal({
   const duration = job?.pooja?.duration || '2.5 घंटे';
   const language = job?.language || 'हिंदी व संस्कृत';
   const gotra = job?.gotra || 'काश्यप';
-  const dakshina = job?.dakshina || 2100;
+  const isUrgent = String(job?.bookingType || '').toUpperCase() === 'URGENT';
+  const urgentSurcharge = Number(job?.urgentSurcharge || (isUrgent ? 350 : 0));
+  const dakshina = Number(job?.dakshina || job?.serviceCharge || job?.price || 2100) + (isUrgent ? urgentSurcharge : 0);
   const netEarning = Math.round(dakshina * 0.85); // 15% platform commission
   const samagriFee = job?.withSamagri ? (job?.samagriFee || 600) : 0;
   const wave = job?.wave || 1;
@@ -150,8 +152,10 @@ export default function IncomingRequestModal({
                 <Text style={s.poojaTitle}>{poojaName}</Text>
                 <Text style={s.poojaSub}>अवधि: {duration} · भाषा: {language}</Text>
               </View>
-              <View style={s.tagBadge}>
-                <Text style={s.tagBadgeText}>तत्काल बुकिंग</Text>
+              <View style={[s.tagBadge, isUrgent && { backgroundColor: '#FEF3C7', borderColor: '#D48B28' }]}>
+                <Text style={[s.tagBadgeText, isUrgent && { color: '#B45309' }]}>
+                  {isUrgent ? `⚡ तत्काल (+₹${urgentSurcharge})` : '📅 अग्रिम पूजा'}
+                </Text>
               </View>
             </View>
 
